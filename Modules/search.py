@@ -1,7 +1,7 @@
 from Modules.queries import graphQL_user_exact_query
 from Modules.requests import user_exact_request
 
-def user_search_exact(token: str, target_user: str): # Add user selection before return prompting for enrichment.
+def user_search_exact(token: str, target_user: str) -> list[dict]: # Add user selection before return prompting for enrichment.
     """
     Inputs: GitHub username (login) and personal access token.
     Outputs: Target user profile dict w/ followership relationships added.

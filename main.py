@@ -47,6 +47,8 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
         "Accept": "application/vnd.github+json"
     }
     
+    print("Validating GitHub Personal Access Token...")
+    
     try:
         r = requests.get(url, headers=headers, timeout=(3,10)) # 3s connect, 10s read timeout
     
@@ -89,9 +91,9 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
-def user_search(token):
+def user_search(token) -> tuple[list[dict], str]:
     '''
-    Broadens target analysis by fetching followership data and returning noteworthy followers:
+    Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
     1. Exact: Returns info on the input user and their followership and stargazing relationships
     2. Partial: PLACEHOLDER
     3. PLACEHOLDER
