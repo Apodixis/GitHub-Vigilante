@@ -26,6 +26,9 @@ def graphQL_user_exact_query(login):
                     socialAccounts(first: $socialSize) {{
                         nodes {{ url }}
                     }}
+                    organizations(first: $pageSize) {{
+                        nodes {{ login }}
+                    }}
                 }}
             }}
             followers(first: $pageSize, after: $followersCursor) {{
@@ -35,8 +38,11 @@ def graphQL_user_exact_query(login):
                     socialAccounts(first: $socialSize) {{
                         nodes {{ url }}
                     }}
+                    organizations(first: $pageSize) {{
+                        nodes {{ login }}
+                    }}
                 }}
             }}
         }}
     }}
-    """
+"""
