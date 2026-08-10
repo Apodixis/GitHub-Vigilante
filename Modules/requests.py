@@ -31,9 +31,13 @@ def _normalize_user(node: Dict) -> Dict:
     Information (per User): Convert GraphQL user node to a flat dict including socialAccounts URLs.
     """
     # Normalize socialAccounts URLs to eliminate erroneous duplicates
-    social_nodes = (node.get("socialAccounts") or {}).get("nodes") or set()
-    normalized_urls = {_normalize_url(n.get("url")) for n in social_nodes if n and n.get("url")}
-    normalized_urls.discard("")  # Remove empty strings if present
+    social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
+    social_accounts = {
+        _normalize_url(n.get("url"))
+        for n in social_nodes
+        if n and n.get("url")
+    }
+    social_accounts.discard("")
     
     # Extract organizations (list of org logins)
     organization_nodes = (node.get("organizations") or {}).get("nodes") or []
@@ -51,7 +55,7 @@ def _normalize_user(node: Dict) -> Dict:
         "createdAt": node.get("createdAt"),
         "name": node.get("name"),
         "emails": emails,
-        "socialAccounts": normalized_urls,
+        "socialAccounts": social_accounts,
         "company": node.get("company"),
         "location": node.get("location"),
         "organizations": organizations,
@@ -85,10 +89,10 @@ def user_exact_request(
     
     while (more_following or more_followers) and (len(following) < max_following or len(followers) < max_followers):
         variables = {
-            "pageSize": min(page_size, 100),
-            "socialSize": min(social_size, 100),
-            "followingCursor": following_cursor,
-            "followersCursor": followers_cursor,
+            "page_size": min(page_size, 100),
+            "social_size": min(social_size, 100),
+            "following_cursor": following_cursor,
+            "followers_cursor": followers_cursor,
         }
         
         response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
@@ -138,3 +142,59 @@ def user_exact_request(
     followership = compare_user_relations(following, followers)
     
     return normalized_target, followership
+
+def user_partial_request(
+    token: str,
+    query: str,
+    page_size: int = 100,
+    social_size: int = 10,
+) -> Tuple[Dict, List[Dict], List[Dict]]:
+    """
+    Inputs: GitHub username (login) and personal access token.
+    Outputs: Matched user profile dicts.
+    Method: GitHub GraphQL API with pagination.
+    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    """
+    headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    
+    variables = {
+            "page_size": min(page_size, 100),
+            "social_size": social_size,
+        }
+    
+    response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
+    response.raise_for_status()
+    payload = response.json()
+    
+    if payload.get("errors"):
+        raise RuntimeError(f"GraphQL error: {payload['errors']}")
+    
+    raw_users = list(payload["data"].values())
+    
+    normalized_users = [
+        _normalize_user(user)
+        for user in raw_users
+        if user
+    ]
+    
+    print(f"Fetched user payload: {normalized_users}")
+    
+    return normalized_users
+
+#============================================================================================
+
+def initial_rest_request(token: str, url: str) -> List[Dict]:
+    """
+    Inputs: GitHub Personal Access Token and complete REST API Query URL.
+    Outputs: Response.json data (Results)
+    Method: REST API request with token authorization
+    Information: All records 
+    """
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    results = response.json()
+    
+    return results

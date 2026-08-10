@@ -2,17 +2,17 @@ import os, openpyxl
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 
-def write_user_search_exact_to_excel(user_data, target_user):
+def write_user_search_exact_to_excel(user_data, target, search_mode):
 	"""
 	Writes user exact search results (without enrichment) to an Excel file.
-	The file is named as: f"{YYYYMMDDHHMM}user_search_exact_{target_user}.xlsx"
+	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target_user}.xlsx"
 	user_data: list of user dicts (target_user + followership)
 	target_user: str, the username searched
 	"""
 	# Create workbook and worksheet
 	wb = openpyxl.Workbook()
 	ws = wb.active
-	ws.title = "UserSearchExact"
+	ws.title = search_mode
     
 	# Preserve column order: start with keys from first user, append any new keys found in others
 	if user_data:
@@ -45,7 +45,7 @@ def write_user_search_exact_to_excel(user_data, target_user):
     
 	# Build filename and path to Downloads
 	date_str = datetime.now().strftime("%Y%m%d%H%M")
-	filename = f"{date_str}user_search_exact_{target_user}.xlsx"
+	filename = f"{date_str}{search_mode}_{target}.xlsx"
 	downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
 	file_path = os.path.join(downloads_folder, filename)
     

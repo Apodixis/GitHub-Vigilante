@@ -50,3 +50,26 @@ def graphQL_user_exact_query(login) -> str:
         }}
     }}
 """
+
+def graphQL_build_partial_user_query(user_logins):
+    """
+    Inputs: Target User login.
+    Outputs: GraphQL User query string.
+    Method: Variable insertion format string, iterative query development.
+    """
+    query = f"""query partialUserQuery {{
+"""
+
+    for i, user in enumerate(user_logins):
+        userIndex = str(i)
+        query += f"""   user{userIndex}: user(login: "{user}") {{
+            login createdAt name email company location bio
+            socialAccounts(first: 10) {{
+                nodes {{ url }}
+                }}
+            }}"""
+    
+        query = query.replace('{{', '{').replace('}}', '}') # Escape braces for f-string
+        query += "}"
+    
+    return query

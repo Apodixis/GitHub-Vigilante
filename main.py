@@ -1,6 +1,6 @@
 import os, time, requests
 from pathlib import Path
-from Modules.search import user_search_exact
+import Modules.search as search
 import Utils.menus as menus
 import Utils.writeToFile as writeToFile
 
@@ -70,7 +70,7 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
 #--------------------------------------------------------------------------------
 
 def _decision_tree() -> int:
-    menus.clearTerminal()
+    menus.clear_terminal()
     
     print("1) User Search")
     print("2) Organization Search") # Development placeholder for planned function
@@ -91,7 +91,7 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
-def user_search(token) -> tuple[list[dict], str]:
+def _user_search(token) -> tuple[list[dict], str]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
     1. Exact: Returns info on the input user and their followership and stargazing relationships
@@ -99,41 +99,50 @@ def user_search(token) -> tuple[list[dict], str]:
     3. PLACEHOLDER
     4. PLACEHOLDER
     '''
+    search_mode = menus.user_search_mode_menu() # User Search Mode Selection
+    menus.clear_terminal()
+    
     target_user = input("Enter the GitHub username to analyze: ").strip()
-    menus.clearTerminal()
+    menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
     
-    user_data = user_search_exact(token, target_user)
+    if search_mode == "1": # User Search Exact
+        mode = "UserSearchExact"
+        user_data, target = search.user_search_exact(token, target_user)
+    
+    if search_mode == "2": # User Search Partial
+        mode = "UserSearchPartial"
+        user_data, target = search.user_search_partial(token, target_user) # PLACEHOLDER for future function
+    
     #print(user_data)
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
-    return user_data, target_user # returns target user for inclusion in file naming convention
+    
+    return user_data, target, mode # returns target user for inclusion in file naming convention
 
 if __name__ == '__main__':
     is_valid, message = validate_personal_access_token(token)
     if not is_valid:
         print(message)
-        menus.quitProgram()
+        menus.quit_program()
         
     choice = _decision_tree() # Begin program execution
     
-    if choice == 1:
-        user_data, target_user = user_search(token) # User Search Exact
-        writeToFile.write_user_search_exact_to_excel(user_data, target_user) # Write user data to Excel file
+    if choice == 1: # User Search
+        user_data, target, mode = _user_search(token) # Fetch user data and target username
+        writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
     
     elif choice == 2:
         print("Organization Search PLACEHOLDER.")
-        menus.quitProgram()
+        menus.quit_program()
     
     elif choice == 3:
         print("PLACEHOLDER for additional functionality.")
-        menus.quitProgram()
+        menus.quit_program()
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")
-        menus.quitProgram()
-    
-    
+        menus.quit_program()
