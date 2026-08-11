@@ -2,7 +2,7 @@ import os, openpyxl
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 
-def write_user_search_exact_to_excel(user_data, target, search_mode):
+def write_user_search_exact_to_excel(user_data, target, search_mode) -> str:
 	"""
 	Writes user exact search results (without enrichment) to an Excel file.
 	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target_user}.xlsx"
@@ -32,6 +32,7 @@ def write_user_search_exact_to_excel(user_data, target, search_mode):
 	for row, user in enumerate(user_data, 2):
 		for col, key in enumerate(all_keys, 1):
 			val = user.get(key, "")
+			
 			# Convert sets/lists to comma-separated string for Excel
 			if isinstance(val, (set, list)):
 				val = ', '.join(str(item) for item in val)

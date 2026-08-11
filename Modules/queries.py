@@ -13,36 +13,36 @@ def graphQL_user_exact_query(login) -> str:
     """
     login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
-    query getAllUserInformation($pageSize: Int = 100, $socialSize: Int = 10, $followingCursor: String, $followersCursor: String) {{
+    query getAllUserInformation($page_size: Int = 100, $social_size: Int = 10, $following_cursor: String, $followers_cursor: String) {{
         user(login: {login_literal}) {{
             login createdAt name email company location bio
-            socialAccounts(first: $socialSize) {{
+            socialAccounts(first: $social_size) {{
                 nodes {{ url }}
             }}
-            organizations(first: $pageSize) {{
+            organizations(first: $page_size) {{
                 totalCount
                 nodes {{ login }}
             }}
-            following(first: $pageSize, after: $followingCursor) {{
+            following(first: $page_size, after: $following_cursor) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
                     login createdAt name email company location bio
-                    socialAccounts(first: $socialSize) {{
+                    socialAccounts(first: $social_size) {{
                         nodes {{ url }}
                     }}
-                    organizations(first: $pageSize) {{
+                    organizations(first: $page_size) {{
                         nodes {{ login }}
                     }}
                 }}
             }}
-            followers(first: $pageSize, after: $followersCursor) {{
+            followers(first: $page_size, after: $followers_cursor) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
                     login createdAt name email company location bio
-                    socialAccounts(first: $socialSize) {{
+                    socialAccounts(first: $social_size) {{
                         nodes {{ url }}
                     }}
-                    organizations(first: $pageSize) {{
+                    organizations(first: $page_size) {{
                         nodes {{ login }}
                     }}
                 }}
@@ -51,7 +51,7 @@ def graphQL_user_exact_query(login) -> str:
     }}
 """
 
-def graphQL_build_partial_user_query(user_logins):
+def graphQL_build_partial_user_query(user_logins) -> str:
     """
     Inputs: Target User login.
     Outputs: GraphQL User query string.
@@ -60,16 +60,41 @@ def graphQL_build_partial_user_query(user_logins):
     query = f"""query partialUserQuery {{
 """
 
-    for i, user in enumerate(user_logins):
+    for i, login in enumerate(user_logins):
         userIndex = str(i)
-        query += f"""   user{userIndex}: user(login: "{user}") {{
+        login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
+        query += f"""   user{userIndex}: user(login: {login_literal}) {{
             login createdAt name email company location bio
             socialAccounts(first: 10) {{
                 nodes {{ url }}
                 }}
             }}"""
-    
-        query = query.replace('{{', '{').replace('}}', '}') # Escape braces for f-string
-        query += "}"
+    query += f"}}"
     
     return query
+
+#============================================================================================
+
+def graphQL_organizations_query(orgLogin: str) -> str:
+    """
+    Inputs: Target Organization login.
+    Outputs: GraphQL Organization query string.
+    Method: Variable insertion format string.
+    """
+    orgLogin_literal = json.dumps(orgLogin) # Ensure orgLogin is properly escaped for GraphQL query
+    return f"""
+    query getOrganizationInformation($page_size: Int = 100, $members_cursor: String) {{
+        organization(login: {orgLogin_literal}) {{
+            login createdAt name email location isVerified twitterUsername websiteUrl description
+            membersWithRole(first: $page_size, after: $members_cursor) {{
+                nodes {{
+                    login createdAt name email company location bio
+                    socialAccounts(first: 10) {{
+                        nodes {{ url }}
+                    }}
+                }}
+                pageInfo {{ hasNextPage endCursor }}
+            }}
+        }}
+    }}
+"""

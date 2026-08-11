@@ -27,8 +27,8 @@ def _normalize_user(node: Dict) -> Dict:
     """
     Inputs: User dict from GraphQL response.
     Outputs: Normalized user dict.
-    Method: Normalizing URLs to eliminate erroneous duplicates in later steps, reduce dimensionality of objects by discarding less relevant information, and reorganizes dict value ordering based on significance for the written output form.
-    Information (per User): Convert GraphQL user node to a flat dict including socialAccounts URLs.
+    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects.
+    Information (per User): login, createdAt, name, emails, socialAccounts, company, location, organizations, bio.
     """
     # Normalize socialAccounts URLs to eliminate erroneous duplicates
     social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
@@ -148,7 +148,7 @@ def user_partial_request(
     query: str,
     page_size: int = 100,
     social_size: int = 10,
-) -> Tuple[Dict, List[Dict], List[Dict]]:
+) -> List[Dict]:
     """
     Inputs: GitHub username (login) and personal access token.
     Outputs: Matched user profile dicts.
@@ -177,13 +177,13 @@ def user_partial_request(
         if user
     ]
     
-    print(f"Fetched user payload: {normalized_users}")
+    #print(f"Fetched user payload: {normalized_users}")
     
     return normalized_users
 
 #============================================================================================
 
-def initial_rest_request(token: str, url: str) -> List[Dict]:
+def initial_rest_request(token: str, url: str) -> Dict:
     """
     Inputs: GitHub Personal Access Token and complete REST API Query URL.
     Outputs: Response.json data (Results)
@@ -198,3 +198,102 @@ def initial_rest_request(token: str, url: str) -> List[Dict]:
     results = response.json()
     
     return results
+
+#============================================================================================
+
+def _normalize_org(node: Dict) -> Dict:
+    """
+    Inputs: Organization or member dict from GraphQL response.
+    Outputs: Normalized organization / member dict with shared key schema.
+    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects.
+    Information (per Organization and member): login, createdAt, name, emails, (socialAccounts or websiteUrl), company (if applicable), location, (description or bio).
+    """
+    # Normalize social account URLs
+    website_url = node.get("websiteUrl")
+    social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
+    if website_url:
+        social_nodes = social_nodes + [{"url": website_url}]
+    social_accounts = {
+        _normalize_url(n.get("url"))
+        for n in social_nodes
+        if n and n.get("url")
+    }
+    social_accounts.discard("")
+    
+    # Normalize org email(s) to set for consistency with user normalization
+    email_val = node.get("email")
+    emails = {email_val} if email_val else set()
+    
+    return {
+        "login": node.get("login"),
+        "createdAt": node.get("createdAt"),
+        "name": node.get("name"),
+        "emails": emails,
+        "socialAccounts": social_accounts if social_accounts else [],
+        "company": node.get("company"),
+        "location": node.get("location"),
+        "bio": node.get("description") if node.get("description") else node.get("bio"),
+    }
+
+def organization_exact_request(
+    token: str,
+    query: str,
+    login: str,
+    max_members: int = 1000,
+    page_size: int = 100,
+) -> List[Dict]:
+    """
+    Inputs: GitHub username (login) and personal access token.
+    Outputs: Target user profile dict, followership list.
+    Method: GitHub GraphQL API with pagination.
+    Information (per User): Login, createdAt, Name, Emails, socialAccounts, Company, Location, membership, Bio.
+    """
+    headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    
+    members: List[Dict] = []
+    members_cursor: Optional[str] = None
+    more_members = True
+    normalized_target: Optional[Dict] = None
+    
+    while more_members and len(members) < max_members:
+        variables = {
+            "page_size": min(page_size, 100),
+            "members_cursor": members_cursor,
+        }
+            
+        response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+            
+        if payload.get("errors"):
+            raise RuntimeError(f"GraphQL error: {payload['errors']}")
+        
+        org = payload.get("data", {}).get("organization")
+        #print(f"Fetched organization payload: {org}")
+        
+        if not org:
+            if normalized_target is None:
+                raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
+            break
+        
+        # Members
+        members_conn = org["membersWithRole"]
+        members_nodes_raw = members_conn.get("nodes") or []
+        members_nodes = [_normalize_org(n) for n in members_nodes_raw]
+        for member in members_nodes:
+            member["membership"] = login
+
+        remaining_members = max_members - len(members)
+        if remaining_members > 0:
+            members.extend(members_nodes[:remaining_members])
+
+        members_cursor = members_conn["pageInfo"]["endCursor"]
+        more_members = members_conn["pageInfo"]["hasNextPage"] and len(members) < max_members
+
+        # If no more to fetch, break
+        if not more_members:
+            break
+    
+    normalized_target = _normalize_org(org)
+
+    return [normalized_target] + members

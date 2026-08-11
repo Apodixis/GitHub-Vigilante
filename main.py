@@ -30,7 +30,7 @@ if not token:
 # Exit if token is still not populated
 if not token:
     print("GitHub Personal Access Token is required to proceed.")
-    menus.quitProgram()
+    menus.quit_program()
 
 ## GITHUB PERSONAL ACCESS TOKEN DECLARATION
 #--------------------------------------------------------------------------------
@@ -91,11 +91,11 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
-def _user_search(token) -> tuple[list[dict], str]:
+def _user_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
     1. Exact: Returns info on the input user and their followership and stargazing relationships
-    2. Partial: PLACEHOLDER
+    2. Partial: Returns info on all users returned by the partial search query. User info includes followership and stargazing relationships. (This may return a large number of users, depending on the search term.)
     3. PLACEHOLDER
     4. PLACEHOLDER
     '''
@@ -111,9 +111,41 @@ def _user_search(token) -> tuple[list[dict], str]:
         mode = "UserSearchExact"
         user_data, target = search.user_search_exact(token, target_user)
     
-    if search_mode == "2": # User Search Partial
+    elif search_mode == "2": # User Search Partial
         mode = "UserSearchPartial"
-        user_data, target = search.user_search_partial(token, target_user) # PLACEHOLDER for future function
+        user_data, target = search.user_search_partial(token, target_user)
+    
+    #print(user_data)
+    
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
+    
+    return user_data, target, mode # returns target user for inclusion in file naming convention
+
+def _organization_search(token) -> tuple[list[dict], str, str]:
+    '''
+    Broadens target analysis by fetching Organization and members info. Intersect search mode can identify users holding significant membership to multiple suspicious organizations:
+    1. Exact: Returns info on the input organizations and its members (useful for preliminary exploration of suspected malicious organizations).
+    2. Intersect: Returns users who are members of more than the threshold number of organizations (useful for searching organizational membership of commonly exploited organizations).
+    3. PLACEHOLDER
+    4. PLACEHOLDER
+    '''
+    search_mode = menus.organization_search_mode_menu() # User Search Mode Selection
+    menus.clear_terminal()
+    
+    target_org = input("Enter the GitHub organization to analyze: ").strip()
+    menus.clear_terminal()
+    
+    start_time = time.perf_counter() # Start time measurement (Benchmarking)
+    
+    if search_mode == "1": # Organization Search
+        mode = "OrganizationSearchExact"
+        user_data, target = search.organization_search(token, target_org)
+    
+    elif search_mode == "2": # Organization Membership Intersect Search
+        mode = "OrganizationIntersectSearch"
+        menus.quit_program() # Placeholder for future implementation of organization membership intersect search
     
     #print(user_data)
     
@@ -135,9 +167,9 @@ if __name__ == '__main__':
         user_data, target, mode = _user_search(token) # Fetch user data and target username
         writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
     
-    elif choice == 2:
-        print("Organization Search PLACEHOLDER.")
-        menus.quit_program()
+    elif choice == 2: # Organization Search
+        org_data, target, mode = _organization_search(token)
+        writeToFile.write_user_search_exact_to_excel(org_data, target, mode) # Write organization data to Excel file
     
     elif choice == 3:
         print("PLACEHOLDER for additional functionality.")
