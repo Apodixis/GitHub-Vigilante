@@ -102,7 +102,13 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     search_mode = menus.user_search_mode_menu() # User Search Mode Selection
     menus.clear_terminal()
     
-    target_user = input("Enter the GitHub username to analyze: ").strip()
+    while True:
+        target_user = input("Enter the user login to analyze: ").strip()
+        if not target_user:
+            print(f"At least one user login is required.")
+            continue
+        break
+    
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
@@ -133,15 +139,34 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
     search_mode = menus.organization_search_mode_menu() # User Search Mode Selection
     menus.clear_terminal()
-    
-    target_org = input("Enter the GitHub organization to analyze: ").strip()
+
+    targets = menus.multiple_input_prompt("Organization")
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
     
     if search_mode == "1": # Organization Search
         mode = "OrganizationSearchExact"
-        user_data, target = search.organization_search(token, target_org)
+
+        org_data = []
+        members_by_login: dict[str, dict] = {}
+        for org_login in targets:
+            org_results, members_by_login = search.organization_search(
+                token,
+                org_login,
+                members_by_login,
+            )
+            org_data.extend(org_results)
+            print(f"{org_login} processed. Member records fetched: {len(members_by_login)}")
+
+        members = list(members_by_login.values())
+        for member in members:
+            membership_value = member.get("membership")
+            if isinstance(membership_value, set):
+                member["membership"] = sorted(membership_value)
+
+        org_data.extend(members)
+        target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-Orgs"
     
     elif search_mode == "2": # Organization Membership Intersect Search
         mode = "OrganizationIntersectSearch"
@@ -153,7 +178,7 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    return user_data, target, mode # returns target user for inclusion in file naming convention
+    return org_data, target, mode # returns target user for inclusion in file naming convention
 
 if __name__ == '__main__':
     is_valid, message = validate_personal_access_token(token)

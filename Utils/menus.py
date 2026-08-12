@@ -20,6 +20,28 @@ def clear_terminal() -> None:
         command = 'cls' if os.name == 'nt' else 'clear'
         subprocess.run(command, shell=True)
 
+def multiple_input_prompt(target_type: str) -> set[str]:
+    """
+    Prompts the user for multiple inputs of a specified target type.
+    Returns the inputs as a set of unique strings.
+    """
+    targets: set[str] = set()
+    print(f"Enter {target_type} login values")
+    print("Press Enter on an empty line when finished.")
+    while True:
+        raw_input_value = input(f"{target_type}(s): ").strip()
+        if not raw_input_value:
+            if targets:
+                clear_terminal()
+                break
+            print(f"At least one {target_type} is required.")
+            continue
+
+        targets.add(raw_input_value)
+
+    clear_terminal()
+    return targets
+
 def user_search_mode_menu() -> str:
     # Menu for selecting user search mode when running main.py
     clear_terminal()

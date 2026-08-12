@@ -239,9 +239,10 @@ def organization_exact_request(
     token: str,
     query: str,
     login: str,
+    members_by_login: Optional[Dict[str, Dict]] = None,
     max_members: int = 1000,
     page_size: int = 100,
-) -> List[Dict]:
+) -> Tuple[List[Dict], Dict[str, Dict]]:
     """
     Inputs: GitHub username (login) and personal access token.
     Outputs: Target user profile dict, followership list.
@@ -250,12 +251,15 @@ def organization_exact_request(
     """
     headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
     
-    members: List[Dict] = []
+    if members_by_login is None:
+        members_by_login = {}
+
     members_cursor: Optional[str] = None
     more_members = True
     normalized_target: Optional[Dict] = None
+    org: Optional[Dict] = None
     
-    while more_members and len(members) < max_members:
+    while more_members:
         variables = {
             "page_size": min(page_size, 100),
             "members_cursor": members_cursor,
@@ -281,19 +285,39 @@ def organization_exact_request(
         members_nodes_raw = members_conn.get("nodes") or []
         members_nodes = [_normalize_org(n) for n in members_nodes_raw]
         for member in members_nodes:
-            member["membership"] = login
+            member_login = member.get("login")
+            if not member_login:
+                continue
 
-        remaining_members = max_members - len(members)
-        if remaining_members > 0:
-            members.extend(members_nodes[:remaining_members])
+            existing_member = members_by_login.get(member_login)
+            if existing_member is not None:
+                existing_membership = existing_member.get("membership", set())
+                if isinstance(existing_membership, str):
+                    existing_membership = {existing_membership}
+                elif isinstance(existing_membership, list):
+                    existing_membership = set(existing_membership)
+
+                existing_membership.add(login)
+                existing_member["membership"] = existing_membership
+                continue
+
+            if len(members_by_login) >= max_members:
+                continue
+
+            member["membership"] = {login}
+            members_by_login[member_login] = member
 
         members_cursor = members_conn["pageInfo"]["endCursor"]
-        more_members = members_conn["pageInfo"]["hasNextPage"] and len(members) < max_members
+        more_members = members_conn["pageInfo"]["hasNextPage"] and len(members_by_login) < max_members
 
         # If no more to fetch, break
         if not more_members:
             break
     
-    normalized_target = _normalize_org(org)
+    if org is None:
+        raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
 
-    return [normalized_target] + members
+    normalized_target = _normalize_org(org)
+    normalized_target["membership"] = "N/A"
+
+    return [normalized_target], members_by_login
