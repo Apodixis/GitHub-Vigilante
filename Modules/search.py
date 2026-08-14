@@ -32,13 +32,13 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     
     followership_rows = list(followership_by_login.values())
     
-    #alphabetizes key order for the 'relation' dict for each followership record (followers and following)
+    # alphabetizes key order for the 'relationships' dict for each followership record (followers and following)
     for user in followership_rows:
-        relation_value = user.get("relation")
-        if isinstance(relation_value, dict):
-            user["relation"] = {
-                target_login: relation_value[target_login]
-                for target_login in sorted(relation_value)
+        relationship_value = user.get("relationships")
+        if isinstance(relationship_value, dict):
+            user["relationships"] = {
+                target_login: relationship_value[target_login]
+                for target_login in sorted(relationship_value)
             }
     
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Users"

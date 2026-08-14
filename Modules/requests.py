@@ -149,35 +149,30 @@ def user_exact_request(
         if not related_login:
             continue
         
-        incoming_relation = related_user.get("relation")
-        related_user["relation"] = {login: incoming_relation} if incoming_relation else {}
+        incoming_relationship = related_user.get("relation")
+        related_user["relationships"] = {login: incoming_relationship} if incoming_relationship else {}
         
         existing_user = followership.get(related_login)
         if existing_user is None:
             followership[related_login] = related_user
             continue
         
-        existing_relation = existing_user.get("relation")
-        if isinstance(existing_relation, dict):
-            existing_relation.update(related_user["relation"])
-        elif isinstance(existing_relation, str):
-            existing_user["relation"] = {login: existing_relation, **related_user["relation"]}
-        elif isinstance(existing_relation, set):
-            # Backward compatibility for previously accumulated data shapes.
-            existing_user["relation"] = {login: ",".join(sorted(existing_relation))}
-            existing_user["relation"].update(related_user["relation"])
+        existing_relationships = existing_user.get("relationships")
+        
+        if isinstance(existing_relationships, dict):
+            existing_relationships.update(related_user["relationships"])
+            
+        elif isinstance(existing_relationships, str):
+            existing_user["relationships"] = {login: existing_relationships, **related_user["relationships"]}
+            
+        elif isinstance(existing_relationships, set):
+            
+            # handles data in incompatible data structs from earlier design and merges it into a dict
+            existing_user["relationships"] = {login: ",".join(sorted(existing_relationships))}
+            existing_user["relationships"].update(related_user["relationships"])
+            
         else:
-            existing_user["relation"] = related_user["relation"]
-        
-        existing_emails = existing_user.get("emails", set())
-        incoming_emails = related_user.get("emails", set())
-        if isinstance(existing_emails, set) and isinstance(incoming_emails, set):
-            existing_user["emails"] = existing_emails | incoming_emails
-        
-        existing_social = existing_user.get("socialAccounts", set())
-        incoming_social = related_user.get("socialAccounts", set())
-        if isinstance(existing_social, set) and isinstance(incoming_social, set):
-            existing_user["socialAccounts"] = existing_social | incoming_social
+            existing_user["relationships"] = related_user["relationships"]
     
     return normalized_target, followership
 
