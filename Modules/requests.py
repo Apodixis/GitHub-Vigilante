@@ -66,11 +66,12 @@ def user_exact_request(
     token: str,
     query: str,
     login: str,
+    followership: Optional[Dict[str, Dict]] = None,
     max_following: int = 250,
     max_followers: int = 250,
     page_size: int = 100,
     social_size: int = 10,
-) -> Tuple[Dict, List[Dict]]:
+) -> Tuple[Dict, Dict[str, Dict]]:
     """
     Inputs: GitHub username (login) and personal access token.
     Outputs: Target user profile dict, followership list.
@@ -78,6 +79,9 @@ def user_exact_request(
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
     headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    
+    if followership is None:
+        followership = {}
     
     following: List[Dict] = []
     followers: List[Dict] = []
@@ -138,8 +142,42 @@ def user_exact_request(
         if not (more_following or more_followers):
             break
     
-    # Sets user['relation'] value for each user based on followership (mutual, following, follower)
-    followership = compare_user_relations(following, followers)
+    # Store per-target relationship type as {target_login: relation_type} and merge by related login.
+    relation_rows = compare_user_relations(following, followers)
+    for related_user in relation_rows:
+        related_login = related_user.get("login")
+        if not related_login:
+            continue
+        
+        incoming_relation = related_user.get("relation")
+        related_user["relation"] = {login: incoming_relation} if incoming_relation else {}
+        
+        existing_user = followership.get(related_login)
+        if existing_user is None:
+            followership[related_login] = related_user
+            continue
+        
+        existing_relation = existing_user.get("relation")
+        if isinstance(existing_relation, dict):
+            existing_relation.update(related_user["relation"])
+        elif isinstance(existing_relation, str):
+            existing_user["relation"] = {login: existing_relation, **related_user["relation"]}
+        elif isinstance(existing_relation, set):
+            # Backward compatibility for previously accumulated data shapes.
+            existing_user["relation"] = {login: ",".join(sorted(existing_relation))}
+            existing_user["relation"].update(related_user["relation"])
+        else:
+            existing_user["relation"] = related_user["relation"]
+        
+        existing_emails = existing_user.get("emails", set())
+        incoming_emails = related_user.get("emails", set())
+        if isinstance(existing_emails, set) and isinstance(incoming_emails, set):
+            existing_user["emails"] = existing_emails | incoming_emails
+        
+        existing_social = existing_user.get("socialAccounts", set())
+        incoming_social = related_user.get("socialAccounts", set())
+        if isinstance(existing_social, set) and isinstance(incoming_social, set):
+            existing_user["socialAccounts"] = existing_social | incoming_social
     
     return normalized_target, followership
 
@@ -253,7 +291,7 @@ def organization_exact_request(
     
     if members_by_login is None:
         members_by_login = {}
-
+    
     members_cursor: Optional[str] = None
     more_members = True
     normalized_target: Optional[Dict] = None
@@ -288,7 +326,7 @@ def organization_exact_request(
             member_login = member.get("login")
             if not member_login:
                 continue
-
+            
             existing_member = members_by_login.get(member_login)
             if existing_member is not None:
                 existing_membership = existing_member.get("membership", set())
@@ -296,28 +334,28 @@ def organization_exact_request(
                     existing_membership = {existing_membership}
                 elif isinstance(existing_membership, list):
                     existing_membership = set(existing_membership)
-
+                
                 existing_membership.add(login)
                 existing_member["membership"] = existing_membership
                 continue
-
+            
             if len(members_by_login) >= max_members:
                 continue
-
+            
             member["membership"] = {login}
             members_by_login[member_login] = member
-
+        
         members_cursor = members_conn["pageInfo"]["endCursor"]
         more_members = members_conn["pageInfo"]["hasNextPage"] and len(members_by_login) < max_members
-
+        
         # If no more to fetch, break
         if not more_members:
             break
     
     if org is None:
         raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
-
+    
     normalized_target = _normalize_org(org)
     normalized_target["membership"] = "N/A"
-
+    
     return [normalized_target], members_by_login

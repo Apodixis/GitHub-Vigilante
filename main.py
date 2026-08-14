@@ -73,7 +73,7 @@ def _decision_tree() -> int:
     menus.clear_terminal()
     
     print("1) User Search")
-    print("2) Organization Search") # Development placeholder for planned function
+    print("2) Organization Search")
     print("3) PLACEHOLDER") # Development placeholder for additional, unknown functions
     print("4) PLACEHOLDER") # Development placeholder for additional, unknown functions
     
@@ -102,24 +102,29 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     search_mode = menus.user_search_mode_menu() # User Search Mode Selection
     menus.clear_terminal()
     
-    while True:
-        target_user = input("Enter the user login to analyze: ").strip()
-        if not target_user:
-            print(f"At least one user login is required.")
-            continue
-        break
-    
-    menus.clear_terminal()
-    
-    start_time = time.perf_counter() # Start time measurement (Benchmarking)
-    
     if search_mode == "1": # User Search Exact
         mode = "UserSearchExact"
-        user_data, target = search.user_search_exact(token, target_user)
+        
+        targets = menus.multiple_input_prompt("User") # user input menu
+        menus.clear_terminal()
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        user_data, target = search.user_search_exact(token, targets)
     
     elif search_mode == "2": # User Search Partial
         mode = "UserSearchPartial"
-        user_data, target = search.user_search_partial(token, target_user)
+        
+        while True:
+            target_substring = input("Enter the user login to analyze: ").strip()
+            if not target_substring:
+                print(f"At least one user login is required.")
+                continue
+            break
+            
+        menus.clear_terminal()
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        user_data, target = search.user_search_partial(token, target_substring)
     
     #print(user_data)
     
@@ -137,17 +142,17 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     3. PLACEHOLDER
     4. PLACEHOLDER
     '''
-    search_mode = menus.organization_search_mode_menu() # User Search Mode Selection
+    search_mode = menus.organization_search_mode_menu() # Organization Search Mode Selection
     menus.clear_terminal()
-
-    targets = menus.multiple_input_prompt("Organization")
+    
+    targets = menus.multiple_input_prompt("Organization") # user input menu
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
     
     if search_mode == "1": # Organization Search
         mode = "OrganizationSearchExact"
-
+        
         org_data = []
         members_by_login: dict[str, dict] = {}
         for org_login in targets:
@@ -158,13 +163,13 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
             )
             org_data.extend(org_results)
             print(f"{org_login} processed. Member records fetched: {len(members_by_login)}")
-
+        
         members = list(members_by_login.values())
         for member in members:
             membership_value = member.get("membership")
             if isinstance(membership_value, set):
                 member["membership"] = sorted(membership_value)
-
+        
         org_data.extend(members)
         target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-Orgs"
     

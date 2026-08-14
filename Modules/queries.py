@@ -58,8 +58,7 @@ def graphQL_build_partial_user_query(user_logins) -> str:
     Method: Variable insertion format string, iterative query development.
     """
     query = f"""query partialUserQuery {{
-"""
-
+    """
     for i, login in enumerate(user_logins):
         userIndex = str(i)
         login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query

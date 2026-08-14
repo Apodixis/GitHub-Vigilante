@@ -36,9 +36,11 @@ def multiple_input_prompt(target_type: str) -> set[str]:
                 break
             print(f"At least one {target_type} is required.")
             continue
-
-        targets.add(raw_input_value)
-
+        
+        parsed_values = [value for value in raw_input_value.replace(",", " ").split() if value]
+        for value in parsed_values:
+            targets.add(value)
+    
     clear_terminal()
     return targets
 
