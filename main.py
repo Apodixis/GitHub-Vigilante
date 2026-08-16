@@ -138,46 +138,35 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching Organization and members info. Intersect search mode can identify users holding significant membership to multiple suspicious organizations:
     1. Exact: Returns info on the input organizations and its members (useful for preliminary exploration of suspected malicious organizations).
-    2. Intersect: Returns users who are members of more than the threshold number of organizations (useful for searching organizational membership of commonly exploited organizations).
-    3. PLACEHOLDER
-    4. PLACEHOLDER
     '''
-    search_mode = menus.organization_search_mode() # Organization Search Mode Selection
-    menus.clear_terminal()
-    
     targets = menus.multiple_input_prompt("Organization") # user input menu
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
+
+    mode = "OrganizationSearchExact"
     
-    if search_mode == "1": # Organization Search
-        mode = "OrganizationSearchExact"
-        
-        org_data = []
-        members_by_login: dict[str, dict] = {}
-        for org_login in targets:
-            org_results, members_by_login = search.organization_search(
-                token,
-                org_login,
-                members_by_login,
-            )
-            org_data.extend(org_results)
-            print(f"{org_login} processed. Member records fetched: {len(members_by_login)}")
-        
-        members = list(members_by_login.values())
-        for member in members:
-            membership_value = member.get("membership")
-            if isinstance(membership_value, set):
-                member["membership"] = sorted(membership_value)
-        
-        org_data.extend(members)
-        target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-Orgs"
+    org_data = []
+    members_by_login: dict[str, dict] = {}
+    for org_login in targets:
+        prior_member_count = len(members_by_login)
+        org_results, members_by_login = search.organization_search(
+            token,
+            org_login,
+            members_by_login,
+        )
+        org_data.extend(org_results)
+        fetched_this_org = len(members_by_login) - prior_member_count
+        print(f"{org_login} processed. Member records fetched: {fetched_this_org}. Total records fetched: {len(members_by_login)}")
     
-    elif search_mode == "2": # Organization Membership Intersect Search
-        mode = "OrganizationIntersectSearch"
-        menus.quit_program() # Placeholder for future implementation of organization membership intersect search
+    members = list(members_by_login.values())
+    for member in members:
+        membership_value = member.get("membership")
+        if isinstance(membership_value, set):
+            member["membership"] = sorted(membership_value)
     
-    #print(user_data)
+    org_data.extend(members)
+    target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-Orgs"
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
@@ -192,6 +181,7 @@ if __name__ == '__main__':
         menus.quit_program()
         
     choice = _decision_tree() # Begin program execution
+    menus.clear_terminal()
     
     if choice == 1: # User Search
         user_data, target, mode = _user_search(token) # Fetch user data and target username

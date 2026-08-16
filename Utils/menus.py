@@ -56,16 +56,3 @@ def user_search_mode() -> str:
             return choice
         else:
             print("Invalid selection. Please enter 1 or 2.")
-
-def organization_search_mode() -> str:
-    # Menu for selecting organization search mode when running main.py
-    clear_terminal()
-    print("1) Organization Search - Exact Match") # Finds information for a specific organization and its members
-    print("2) Organization Search - Membership Intersect") # Finds users who are members of multiple organizations
-    
-    while True:
-        choice = input("Enter 1 or 2: ").strip()
-        if choice == "1" or choice == "2":
-            return choice
-        else:
-            print("Invalid selection. Please enter 1 or 2.")

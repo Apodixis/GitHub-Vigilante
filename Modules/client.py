@@ -203,6 +203,7 @@ def organization_exact(
     more_members = True
     normalized_target: Optional[Dict] = None
     org: Optional[Dict] = None
+    new_members = 0
     
     while more_members:
         variables = {
@@ -246,14 +247,18 @@ def organization_exact(
                 existing_member["membership"] = existing_membership
                 continue
             
-            if len(members_by_login) >= max_members:
+            if new_members >= max_members:
                 continue
             
             member["membership"] = {login}
             members_by_login[member_login] = member
+            new_members += 1
         
         members_cursor = members_conn["pageInfo"]["endCursor"]
-        more_members = members_conn["pageInfo"]["hasNextPage"] and len(members_by_login) < max_members
+        more_members = (
+            members_conn["pageInfo"]["hasNextPage"]
+            and new_members < max_members
+        )
         
         # If no more to fetch, break
         if not more_members:
