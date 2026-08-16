@@ -189,10 +189,10 @@ def organization_exact(
     page_size: int = 100,
 ) -> Tuple[List[Dict], Dict[str, Dict]]:
     """
-    Inputs: GitHub username (login) and personal access token.
-    Outputs: Target user profile dict, followership list.
+    Inputs: GitHub personal access token, graphQL Organizations query, and a GitHub organization login
+    Outputs: List of Organization dicts, and a deduplicated members dict (keyed by member login).
     Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, createdAt, Name, Emails, socialAccounts, Company, Location, membership, Bio.
+    Information (per Organization/member): Login, createdAt, Name, Email, social accounts, Company, Location, membership, Bio.
     """
     headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
     

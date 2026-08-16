@@ -1,6 +1,6 @@
-from typing import Optional, Iterable
-import Modules.queries as queries
+from typing import Iterable
 import Modules.client as client
+import Modules.queries as queries
 
 def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
@@ -74,21 +74,42 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
 
 def organization_search(
     token: str,
-    login: str,
-    members_by_login: Optional[dict[str, dict]] = None,
-) -> tuple[list[dict], dict[str, dict]]:
+    login: str | Iterable[str],
+) -> tuple[list[dict], str]:
     """
-    Inputs: GitHub organization name (login) and personal access token.
-    Outputs: Organization profile dict, dict of members keyed by member login.
+    Inputs: GitHub organization name(s) (login) and personal access token.
+    Outputs: Organization profile dicts plus deduplicated member dicts, and target label.
     Method: GitHub GraphQL API with pagination.
     Information (per Organization): Login, createdAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description.
     """
-    query = queries.graphQL_organizations(login)
-    target_org, members_by_login = client.organization_exact(
-        token,
-        query,
-        login,
-        members_by_login
-    )
+    if isinstance(login, str):
+        logins = [login]
+    else:
+        logins = [value for value in login if value]
     
-    return target_org, members_by_login
+    org_rows: list[dict] = []
+    members_by_login: dict[str, dict] = {}
+    
+    for org_login in logins:
+        prior_member_count = len(members_by_login)
+        query = queries.graphQL_organizations(org_login)
+        target_org, members_by_login = client.organization_exact(
+            token,
+            query,
+            org_login,
+            members_by_login,
+        )
+        
+        org_rows.extend(target_org)
+        fetched_this_org = len(members_by_login) - prior_member_count
+        print(f"{org_login} processed. Member records fetched: {fetched_this_org}. Total records fetched: {len(members_by_login)}")
+    
+    members = list(members_by_login.values())
+    for member in members:
+        membership_value = member.get("membership")
+        if isinstance(membership_value, set):
+            member["membership"] = sorted(membership_value)
+    
+    target = logins[0] if len(logins) == 1 else f"{len(logins)}-Orgs"
+    
+    return org_rows + members, target

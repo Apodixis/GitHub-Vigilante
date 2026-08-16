@@ -139,34 +139,13 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     Broadens target analysis by fetching Organization and members info. Intersect search mode can identify users holding significant membership to multiple suspicious organizations:
     1. Exact: Returns info on the input organizations and its members (useful for preliminary exploration of suspected malicious organizations).
     '''
+    mode = "OrganizationSearch"
+    
     targets = menus.multiple_input_prompt("Organization") # user input menu
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
-
-    mode = "OrganizationSearchExact"
-    
-    org_data = []
-    members_by_login: dict[str, dict] = {}
-    for org_login in targets:
-        prior_member_count = len(members_by_login)
-        org_results, members_by_login = search.organization_search(
-            token,
-            org_login,
-            members_by_login,
-        )
-        org_data.extend(org_results)
-        fetched_this_org = len(members_by_login) - prior_member_count
-        print(f"{org_login} processed. Member records fetched: {fetched_this_org}. Total records fetched: {len(members_by_login)}")
-    
-    members = list(members_by_login.values())
-    for member in members:
-        membership_value = member.get("membership")
-        if isinstance(membership_value, set):
-            member["membership"] = sorted(membership_value)
-    
-    org_data.extend(members)
-    target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-Orgs"
+    org_data, target = search.organization_search(token, targets)
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
