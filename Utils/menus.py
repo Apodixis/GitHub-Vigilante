@@ -44,7 +44,7 @@ def multiple_input_prompt(target_type: str) -> set[str]:
     clear_terminal()
     return targets
 
-def user_search_mode_menu() -> str:
+def user_search_mode() -> str:
     # Menu for selecting user search mode when running main.py
     clear_terminal()
     print("1) User Search - Exact Match") # Finds information for a specific user: (User, Followership, and Stargazing)
@@ -57,9 +57,7 @@ def user_search_mode_menu() -> str:
         else:
             print("Invalid selection. Please enter 1 or 2.")
 
-
-
-def organization_search_mode_menu() -> str:
+def organization_search_mode() -> str:
     # Menu for selecting organization search mode when running main.py
     clear_terminal()
     print("1) Organization Search - Exact Match") # Finds information for a specific organization and its members

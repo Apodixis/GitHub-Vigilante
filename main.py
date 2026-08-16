@@ -99,7 +99,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     3. PLACEHOLDER
     4. PLACEHOLDER
     '''
-    search_mode = menus.user_search_mode_menu() # User Search Mode Selection
+    search_mode = menus.user_search_mode() # User Search Mode Selection
     menus.clear_terminal()
     
     if search_mode == "1": # User Search Exact
@@ -142,7 +142,7 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     3. PLACEHOLDER
     4. PLACEHOLDER
     '''
-    search_mode = menus.organization_search_mode_menu() # Organization Search Mode Selection
+    search_mode = menus.organization_search_mode() # Organization Search Mode Selection
     menus.clear_terminal()
     
     targets = menus.multiple_input_prompt("Organization") # user input menu

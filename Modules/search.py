@@ -1,6 +1,6 @@
 from typing import Optional, Iterable
-from Modules.queries import graphQL_user_exact_query, graphQL_build_partial_user_query, graphQL_organizations_query
-from Modules.requests import user_exact_request, user_partial_request, initial_rest_request, organization_exact_request
+import Modules.queries as queries
+import Modules.client as client
 
 def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
@@ -19,8 +19,8 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
-        query = graphQL_user_exact_query(user_login) # Construct the GraphQL query string for current target user
-        target_user, followership_by_login = user_exact_request(
+        query = queries.graphQL_user_exact(user_login) # Construct the GraphQL query string for current target user
+        target_user, followership_by_login = client.user_exact(
             token,
             query,
             user_login,
@@ -53,7 +53,7 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
     url = f"https://api.github.com/search/users?q={login_substring}+in:login&per_page=100"
-    users = initial_rest_request(token, url)
+    users = client.initial_rest(token, url)
     
     logins = []
     for user in users.get("items", []):
@@ -63,10 +63,10 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
             continue
     #print(f"users: {logins}")
     
-    query = graphQL_build_partial_user_query(logins)
+    query = queries.graphQL_build_partial_user(logins)
     #print(query)
     
-    results = user_partial_request(token, query)
+    results = client.user_partial(token, query)
     #print(results)
     return results, login_substring
 
@@ -83,8 +83,8 @@ def organization_search(
     Method: GitHub GraphQL API with pagination.
     Information (per Organization): Login, createdAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description.
     """
-    query = graphQL_organizations_query(login)
-    target_org, members_by_login = organization_exact_request(
+    query = queries.graphQL_organizations(login)
+    target_org, members_by_login = client.organization_exact(
         token,
         query,
         login,
