@@ -1,6 +1,13 @@
 import os, openpyxl
 from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from datetime import datetime
+
+def _sanitize_excel_value(value):
+	"""Remove control characters that openpyxl cannot store in worksheet cells."""
+	if isinstance(value, str):
+		return ILLEGAL_CHARACTERS_RE.sub("", value)
+	return value
 
 def write_user_search_exact_to_excel(user_data, target, search_mode) -> str:
 	"""
@@ -36,8 +43,11 @@ def write_user_search_exact_to_excel(user_data, target, search_mode) -> str:
 			# Convert sets/lists to comma-separated string for Excel
 			if isinstance(val, (set, list)):
 				val = ', '.join(str(item) for item in val)
+			
 			elif isinstance(val, dict):
 				val = str(val)
+			
+			val = _sanitize_excel_value(val)
 			ws.cell(row=row, column=col, value=val)
     
 	# Autosize columns

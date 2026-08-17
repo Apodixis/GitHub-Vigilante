@@ -7,7 +7,7 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     Inputs: GitHub username (login) and personal access token.
     Outputs: Target user profile dict w/ followership relationships added.
     Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
     if isinstance(login, str):
         logins = [login]
@@ -50,23 +50,36 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     Inputs: GitHub username and personal access token.
     Outputs: Target user profile dict w/ followership relationships added.
     Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
-    url = f"https://api.github.com/search/users?q={login_substring}+in:login&per_page=100"
-    users = client.initial_rest(token, url)
+    i = 1
+    results: list[dict] = []
+    while i <= 10: # GitHub Search API is capped to 1000 results (10 pages at per_page=100).
+        base_url = "https://api.github.com/search/users"
+        params = {
+            "q": f"{login_substring} in:login",
+            "per_page": 100,
+            "page": i
+        }
+        users = client.initial_rest(token, base_url, params=params)
+        page_users = users.get("items", [])
+        
+        if not page_users:
+            break
+        
+        page_logins = []
+        for user in page_users:
+            if user.get("type") == "User":
+                page_logins.append(user["login"])
+        
+        if page_logins:
+            query = queries.graphQL_build_partial_user(page_logins)
+            page_results = client.user_partial(token, query)
+            results.extend(page_results)
+            print(f"{len(page_results)} user records fetched from page {i}. Total records fetched: {len(results)}")
+        
+        i += 1
     
-    logins = []
-    for user in users.get("items", []):
-        if user.get("type") == "User":
-            logins.append(user["login"])
-        else:
-            continue
-    #print(f"users: {logins}")
-    
-    query = queries.graphQL_build_partial_user(logins)
-    #print(query)
-    
-    results = client.user_partial(token, query)
     #print(results)
     return results, login_substring
 
@@ -80,7 +93,7 @@ def organization_search(
     Inputs: GitHub organization name(s) (login) and personal access token.
     Outputs: Organization profile dicts plus deduplicated member dicts, and target label.
     Method: GitHub GraphQL API with pagination.
-    Information (per Organization): Login, createdAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description.
+    Information (per Organization): Login, createdAt, updatedAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description.
     """
     if isinstance(login, str):
         logins = [login]

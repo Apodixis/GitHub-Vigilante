@@ -162,7 +162,7 @@ def user_partial(
 
 #============================================================================================
 
-def initial_rest(token: str, url: str) -> Dict:
+def initial_rest(token: str, url: str, params: Optional[Dict] = None) -> Dict:
     """
     Inputs: GitHub Personal Access Token and complete REST API Query URL.
     Outputs: Response.json data (Results)
@@ -172,7 +172,7 @@ def initial_rest(token: str, url: str) -> Dict:
     headers = {"Accept": "application/vnd.github+json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, params=params, timeout=(10,10)) # 10s connect, 10s read timeout
     response.raise_for_status()
     results = response.json()
     

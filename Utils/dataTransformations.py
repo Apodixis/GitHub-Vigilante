@@ -49,6 +49,7 @@ def normalize_user(node: Dict) -> Dict:
     return {
         "login": node.get("login"),
         "createdAt": node.get("createdAt"),
+        "updatedAt": node.get("updatedAt"),
         "name": node.get("name"),
         "emails": emails,
         "socialAccounts": social_accounts,
@@ -84,6 +85,7 @@ def normalize_org(node: Dict) -> Dict:
     return {
         "login": node.get("login"),
         "createdAt": node.get("createdAt"),
+        "updatedAt": node.get("updatedAt"),
         "name": node.get("name"),
         "emails": emails,
         "socialAccounts": social_accounts if social_accounts else [],

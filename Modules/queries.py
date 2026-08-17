@@ -15,7 +15,7 @@ def graphQL_user_exact(login) -> str:
     return f"""
     query getAllUserInformation($page_size: Int = 100, $social_size: Int = 10, $following_cursor: String, $followers_cursor: String) {{
         user(login: {login_literal}) {{
-            login createdAt name email company location bio
+            login createdAt updatedAt name email company location bio
             socialAccounts(first: $social_size) {{
                 nodes {{ url }}
             }}
@@ -26,7 +26,7 @@ def graphQL_user_exact(login) -> str:
             following(first: $page_size, after: $following_cursor) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
-                    login createdAt name email company location bio
+                    login createdAt updatedAt name email company location bio
                     socialAccounts(first: $social_size) {{
                         nodes {{ url }}
                     }}
@@ -38,7 +38,7 @@ def graphQL_user_exact(login) -> str:
             followers(first: $page_size, after: $followers_cursor) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
-                    login createdAt name email company location bio
+                    login createdAt updatedAt name email company location bio
                     socialAccounts(first: $social_size) {{
                         nodes {{ url }}
                     }}
@@ -63,7 +63,7 @@ def graphQL_build_partial_user(user_logins) -> str:
         userIndex = str(i)
         login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
         query += f"""   user{userIndex}: user(login: {login_literal}) {{
-            login createdAt name email company location bio
+            login createdAt updatedAt name email company location bio
             socialAccounts(first: 10) {{
                 nodes {{ url }}
                 }}
@@ -84,10 +84,10 @@ def graphQL_organizations(orgLogin: str) -> str:
     return f"""
     query getOrganizationInformation($page_size: Int = 100, $members_cursor: String) {{
         organization(login: {orgLogin_literal}) {{
-            login createdAt name email location isVerified twitterUsername websiteUrl description
+            login createdAt updatedAt name email location isVerified twitterUsername websiteUrl description
             membersWithRole(first: $page_size, after: $members_cursor) {{
                 nodes {{
-                    login createdAt name email company location bio
+                    login createdAt updatedAt name email company location bio
                     socialAccounts(first: 10) {{
                         nodes {{ url }}
                     }}
