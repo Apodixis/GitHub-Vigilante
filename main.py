@@ -73,8 +73,8 @@ def _decision_tree() -> int:
     menus.clear_terminal()
     
     print("1) User Search")
-    print("2) Organization Search")
-    print("3) PLACEHOLDER") # Development placeholder for additional, unknown functions
+    print("2) Email Search")
+    print("3) Organization Search")
     print("4) PLACEHOLDER") # Development placeholder for additional, unknown functions
     
     while True:
@@ -134,6 +134,21 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     
     return user_data, target, mode # returns target user for inclusion in file naming convention
 
+def _email_search(token):
+    mode = "EmailPseudonymHistory"
+            
+    targets = menus.multiple_input_prompt("Email") # email input menu
+    menus.clear_terminal()
+    
+    start_time = time.perf_counter() # Start time measurement (Benchmarking)
+    user_data, target = search.email_pseudonyms(token, targets)
+    
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
+    
+    return user_data, target, mode # returns target user for inclusion in file naming convention
+
 def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching Organization and members info. Intersect search mode can identify users holding significant membership to multiple suspicious organizations:
@@ -166,13 +181,13 @@ if __name__ == '__main__':
         user_data, target, mode = _user_search(token) # Fetch user data and target username
         writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
     
-    elif choice == 2: # Organization Search
+    elif choice == 2: # Email Search
+        user_data, target, mode = _email_search(token)
+        writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
+    
+    elif choice == 3: # Organization Search
         org_data, target, mode = _organization_search(token)
         writeToFile.write_user_search_exact_to_excel(org_data, target, mode) # Write organization data to Excel file
-    
-    elif choice == 3:
-        print("PLACEHOLDER for additional functionality.")
-        menus.quit_program()
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")

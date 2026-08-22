@@ -85,6 +85,108 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
 
 #============================================================================================
 
+def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[list[dict], str]:
+    """
+    Inputs: GitHub personal access token and target email addresses.
+    Outputs: List of pseudonymous user profiles associated with the target emails.
+    Method: GitHub Search API for commits with pagination.
+    Information (per User): Login, Name, Email.
+    """
+    base_url = "https://api.github.com/search/commits"
+    results: list[dict] = []
+    seen: set[tuple[str | None, str | None, str | None]] = set()
+    
+    for target in target_emails:
+        order = "asc"
+        query_descending = False # Used to capture newest commits for users with totalCommits > 1000 (improves volume of considered data)
+        descending_remainder: int | None = None
+        j = 1 # Define accumulator used in ascending and descending searches
+        
+        while True:
+            i = 1 # Define accumulator used in searches (value not carried over to descending searches)
+            totalCount: int | None = descending_remainder if order == "desc" else None
+            if totalCount is None:
+                total_pages = 1
+            else:
+                capped_total = min(totalCount, 1000)
+                total_pages = (capped_total // 100) + (1 if capped_total % 100 else 0)
+            
+            while i <= total_pages:
+                per_page = 100 if totalCount is None or totalCount >= 100 else totalCount
+                params = {
+                    "q": f"author-email:{target}",
+                    "per_page": per_page,
+                    "page": i,
+                    "sort": "author-date",
+                    "order": order
+                }
+                response = client.initial_rest(token, base_url, params)
+                
+                if totalCount is None:
+                    totalCount = response.get("total_count", 0)
+                    
+                    total_pages = (min(totalCount, 1000) // 100) + (1 if min(totalCount, 1000) % 100 else 0) # Determines how many requests are required (up to 10)
+                    
+                    # checks if second loop is necessary to capture commits beyond the oldest 1000 results
+                    if order == "asc" and totalCount > 1000:
+                        query_descending = True
+                        descending_remainder = totalCount - 1000
+                
+                commits = response.get("items", [])
+                
+                if not commits:
+                    break
+                
+                for item in commits:
+                    login = (item.get("author") or {}).get("login")
+                    name = (item.get("commit", {}).get("author") or {}).get("name")
+                    email = (item.get("commit", {}).get("author") or {}).get("email")
+                    
+                    pair = (login, name, email)
+                    if pair in seen:
+                        continue
+                    
+                    else:
+                        seen.add(pair)
+                    
+                    if login is not None or name is not None or email is not None:
+                        results.append({
+                            "login": login,
+                            "name": name,
+                            "email": email,
+                        })
+                
+                # progress update block
+                if j == 1:
+                    print(f"\nHarvesting earliest commit data for: {target}")
+                if j == 11:
+                    print(f"\nHarvesting latest commit data for: {target}")
+                print(f"    Page {j}: {len(commits)} commit records processed. Total unique pseudonym combinations harvested: {len(results)}")
+                
+                if totalCount >= 100:
+                    totalCount -= 100
+                else:
+                    totalCount = 0
+                
+                i, j = i + 1, j + 1 # increment to update request params and print statement
+            
+            # Set conditions to begin collecting data from "head" of commit history
+            if order == "asc" and query_descending:
+                order = "desc"
+                i = 1
+                totalCount = None
+                query_descending = False
+                continue
+            
+            break
+    
+    target = next(iter(target_emails)) if len(target_emails) == 1 else f"{len(target_emails)}-Emails"
+    
+    return results, target
+
+
+#============================================================================================
+
 def organization_search(
     token: str,
     login: str | Iterable[str],
