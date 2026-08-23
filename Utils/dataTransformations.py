@@ -114,17 +114,17 @@ def compare_user_relations(following: list, followers: list) -> list:
     for login in all_logins:
         if login in following_dict and login in followers_dict:
             user = following_dict[login].copy()
-            user['relation'] = 'mutual'
+            user['_relation'] = 'mutual'
             relations.append(user)
             
         elif login in following_dict:
             user = following_dict[login].copy()
-            user['relation'] = 'following'
+            user['_relation'] = 'following'
             relations.append(user)
             
         elif login in followers_dict:
             user = followers_dict[login].copy()
-            user['relation'] = 'follower'
+            user['_relation'] = 'follower'
             relations.append(user)
     
     return relations

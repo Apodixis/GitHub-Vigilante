@@ -70,7 +70,6 @@ def graphql_user_exact_request(
         # Normalize target_user and perform some data transformations
         if normalized_target is None:
             normalized_target = transform.normalize_user(user)
-            normalized_target["relation"] = "N/A"
             normalized_target["relationships"] = {}
         
         # Following
@@ -104,7 +103,7 @@ def graphql_user_exact_request(
         if not related_login:
             continue
         
-        incoming_relationship = related_user.get("relation")
+        incoming_relationship = related_user.pop("_relation", None)
         related_user["relationships"] = {login: incoming_relationship} if incoming_relationship else {}
         
         existing_user = followership.get(related_login)
