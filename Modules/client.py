@@ -174,11 +174,16 @@ def initial_rest(token: str, url: str, params: Optional[Dict] = None) -> Dict:
         headers["Authorization"] = f"Bearer {token}"
     response = requests.get(url, headers=headers, params=params, timeout=(10,10)) # 10s connect, 10s read timeout
     
-    # http response error notification
-    if not response.ok:
-        print(f"GitHub REST API error ({response.status_code}): {response.text}")
-        print(f"Rate limit remaining: {response.headers.get('X-RateLimit-Remaining')}")
-        print(f"Rate limit reset: {response.headers.get('X-RateLimit-Reset')}")
+    # http response error notification    
+    if response.status_code == 403:
+        remaining = response.headers.get("X-RateLimit-Remaining")
+        reset = response.headers.get("X-RateLimit-Reset")
+        
+        print(f"GitHub API rate limit exhausted. Remaining: {remaining}")
+        print(f"Rate limit resets at Unix timestamp: {reset}")
+        
+        if remaining == "0":
+            return {}
     
     response.raise_for_status()
     results = response.json()

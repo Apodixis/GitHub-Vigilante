@@ -1,3 +1,4 @@
+import time
 from typing import Iterable
 import Modules.client as client
 import Modules.queries as queries
@@ -95,6 +96,11 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
     base_url = "https://api.github.com/search/commits"
     results: list[dict] = []
     seen: set[tuple[str | None, str | None, str | None]] = set()
+    # Variable declarations for rate limit safeguards
+    request_times: list[float] = []
+    max_requests_per_minute = 30
+    rate_limit_window = 60.0
+    # --
     
     for target in target_emails:
         prev_email_length = len(results)
@@ -121,7 +127,28 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
                     "sort": "author-date",
                     "order": order
                 }
+                
+                # REST API rate limit handling (prevents exceeding 30 requests per minute)
+                now = time.monotonic()
+                request_times[:] = [
+                    request_time
+                    for request_time in request_times
+                    if now - request_time < rate_limit_window
+                ]
+                if len(request_times) >= max_requests_per_minute:
+                    delay = rate_limit_window - (now - request_times[0])
+                    #print(f"Search API limit reached; waiting {delay:.1f} seconds before the next request.")
+                    time.sleep(max(delay, 0))
+                    now = time.monotonic()
+                    request_times[:] = [
+                        request_time
+                        for request_time in request_times
+                        if now - request_time < rate_limit_window
+                    ]
+                
+                request_times.append(now)
                 response = client.initial_rest(token, base_url, params)
+                # --
                 
                 if totalCount is None:
                     totalCount = response.get("total_count", 0)
