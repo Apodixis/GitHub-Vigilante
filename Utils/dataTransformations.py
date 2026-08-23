@@ -10,7 +10,12 @@ def normalize_url(raw: str) -> str:
     if not raw:
         return ""
     cleaned = raw.replace('\xa0', '').rstrip(".,;:<>\"'[]{}-=+!?@#$%^&*()|\\/`~ \n\r") # Clean URL of whitespace and trailing punctuation
-    parts = urlsplit(cleaned)
+    
+    try:
+        parts = urlsplit(cleaned)
+    except ValueError as error:
+        print(f"URL normalization failed: {error}")
+        return ""
     
     scheme = "https" if parts.scheme in ("http", "https") else parts.scheme
     netloc = parts.netloc.lower()
