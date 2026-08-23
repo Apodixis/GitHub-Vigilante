@@ -63,6 +63,8 @@ def graphql_user_exact_request(
         # Normalize target_user and perform some data transformations
         if normalized_target is None:
             normalized_target = transform.normalize_user(user)
+            normalized_target["relation"] = "N/A"
+            normalized_target["relationships"] = {}
         
         # Following
         following_conn = user["following"]
