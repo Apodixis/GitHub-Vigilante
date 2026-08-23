@@ -8,7 +8,7 @@ Central location for sending HTTP requests and handling response contents
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
-def user_exact(
+def graphql_user_exact_request(
     token: str,
     query: str,
     login: str,
@@ -122,7 +122,7 @@ def user_exact(
     
     return normalized_target, followership
 
-def user_partial(
+def graphql_user_partial_request(
     token: str,
     query: str,
     page_size: int = 100,
@@ -162,7 +162,7 @@ def user_partial(
 
 #============================================================================================
 
-def initial_rest(token: str, url: str, params: Optional[Dict] = None) -> Dict:
+def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Dict:
     """
     Inputs: GitHub Personal Access Token and complete REST API Query URL.
     Outputs: Response.json data (Results)
@@ -192,7 +192,7 @@ def initial_rest(token: str, url: str, params: Optional[Dict] = None) -> Dict:
 
 #============================================================================================
 
-def organization_exact(
+def graphql_organization_exact_request(
     token: str,
     query: str,
     login: str,

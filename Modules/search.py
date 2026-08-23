@@ -20,8 +20,8 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
-        query = queries.graphQL_user_exact(user_login) # Construct the GraphQL query string for current target user
-        target_user, followership_by_login = client.user_exact(
+        query = queries.graphQL_user_exact_query(user_login) # Construct the GraphQL query string for current target user
+        target_user, followership_by_login = client.graphql_user_exact_request(
             token,
             query,
             user_login,
@@ -62,7 +62,7 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
             "per_page": 100,
             "page": i
         }
-        users = client.initial_rest(token, base_url, params=params)
+        users = client.rest_request(token, base_url, params=params)
         page_users = users.get("items", [])
         
         if not page_users:
@@ -74,8 +74,8 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
                 page_logins.append(user["login"])
         
         if page_logins:
-            query = queries.graphQL_build_partial_user(page_logins)
-            page_results = client.user_partial(token, query)
+            query = queries.graphQL_build_partial_user_query(page_logins)
+            page_results = client.graphql_user_partial_request(token, query)
             results.extend(page_results)
             print(f"{len(page_results)} user records fetched from page {i}. Total records fetched: {len(results)}")
         
@@ -147,7 +147,7 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
                     ]
                 
                 request_times.append(now)
-                response = client.initial_rest(token, base_url, params)
+                response = client.rest_request(token, base_url, params)
                 # --
                 
                 if totalCount is None:
@@ -237,8 +237,8 @@ def organization_search(
     
     for org_login in logins:
         prior_member_count = len(members_by_login)
-        query = queries.graphQL_organizations(org_login)
-        target_org, members_by_login = client.organization_exact(
+        query = queries.graphQL_organizations_exact_query(org_login)
+        target_org, members_by_login = client.graphql_organization_exact_request(
             token,
             query,
             org_login,

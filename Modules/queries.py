@@ -5,7 +5,7 @@ Central location for GraphQL and REST API query strings used in in requests.
 # Query for GitHub user information, including followership and social accounts
 ## DESIGN_NOTE: Potential Optimization - Omit Organization Info for follower/following in the initial user query, then build a batched user org query from the merged followership set.
 
-def graphQL_user_exact(login) -> str:
+def graphQL_user_exact_query(login) -> str:
     """
     Inputs: Target User login.
     Outputs: GraphQL User query string.
@@ -51,7 +51,7 @@ def graphQL_user_exact(login) -> str:
     }}
 """
 
-def graphQL_build_partial_user(user_logins) -> str:
+def graphQL_build_partial_user_query(user_logins) -> str:
     """
     Inputs: Target User login.
     Outputs: GraphQL User query string.
@@ -74,7 +74,7 @@ def graphQL_build_partial_user(user_logins) -> str:
 
 #============================================================================================
 
-def graphQL_organizations(orgLogin: str) -> str:
+def graphQL_organizations_exact_query(orgLogin: str) -> str:
     """
     Inputs: Target Organization login.
     Outputs: GraphQL Organization query string.
