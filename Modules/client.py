@@ -49,7 +49,14 @@ def graphql_user_exact_request(
         response.raise_for_status()
         payload = response.json()
         
+        # error handling
         if payload.get("errors"):
+            user_not_found = any(
+                error.get("type") == "NOT_FOUND" and error.get("path") == ["user"]
+                for error in payload["errors"]
+            )
+            if user_not_found:
+                raise ValueError(f"Target user '{login}' not found or no data returned from GitHub API.")
             raise RuntimeError(f"GraphQL error: {payload['errors']}")
         
         user = payload.get("data", {}).get("user")

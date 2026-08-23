@@ -21,12 +21,18 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
         query = queries.graphQL_user_exact_query(user_login) # Construct the GraphQL query string for current target user
-        target_user, followership_by_login = client.graphql_user_exact_request(
-            token,
-            query,
-            user_login,
-            followership_by_login
-        )
+        
+        # error handling for input users with invalid logins (no corresponding account exists)
+        try:
+            target_user, followership_by_login = client.graphql_user_exact_request(
+                token,
+                query,
+                user_login,
+                followership_by_login
+            )
+        except ValueError:
+            print(f"{user_login} skipped: Invalid Login")
+            continue
         
         target_rows.append(target_user) # Append completed iteration target user to the list of target user dicts
         print(f"{user_login} processed. Followership records fetched: {len(followership_by_login)}")
