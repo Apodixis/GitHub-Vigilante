@@ -128,6 +128,14 @@ def graphql_user_exact_request(
         else:
             existing_user["relationships"] = related_user["relationships"]
     
+    target_relationships = normalized_target.get("relationships") if normalized_target else None
+    if isinstance(target_relationships, dict) and normalized_target is not None:
+        normalized_target["total_relationships"] = len(target_relationships)
+    
+    for related_user in followership.values():
+        relationships = related_user.get("relationships")
+        related_user["total_relationships"] = len(relationships) if isinstance(relationships, dict) else 0
+    
     return normalized_target, followership
 
 def graphql_user_partial_request(
