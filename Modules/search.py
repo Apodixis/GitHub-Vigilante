@@ -97,6 +97,7 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
     seen: set[tuple[str | None, str | None, str | None]] = set()
     
     for target in target_emails:
+        prev_email_length = len(results)
         order = "asc"
         query_descending = False # Used to capture newest commits for users with totalCommits > 1000 (improves volume of considered data)
         descending_remainder: int | None = None
@@ -161,7 +162,7 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
                     print(f"\nHarvesting earliest commit data for: {target}")
                 if j == 11:
                     print(f"\nHarvesting latest commit data for: {target}")
-                print(f"    Page {j}: {len(commits)} commit records processed. Total unique pseudonym combinations harvested: {len(results)}")
+                print(f"    Page {j}: {len(commits)} commit records processed. Total unique pseudonym combinations harvested: {len(results) - prev_email_length}")
                 
                 if totalCount >= 100:
                     totalCount -= 100
@@ -181,6 +182,8 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
             break
     
     target = next(iter(target_emails)) if len(target_emails) == 1 else f"{len(target_emails)}-Emails"
+    
+    print(f"\n{len(target_emails)} emails processed: {len(results)} unique pseudonym combinations harvested.")
     
     return results, target
 

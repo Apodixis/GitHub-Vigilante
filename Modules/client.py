@@ -173,6 +173,13 @@ def initial_rest(token: str, url: str, params: Optional[Dict] = None) -> Dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     response = requests.get(url, headers=headers, params=params, timeout=(10,10)) # 10s connect, 10s read timeout
+    
+    # http response error notification
+    if not response.ok:
+        print(f"GitHub REST API error ({response.status_code}): {response.text}")
+        print(f"Rate limit remaining: {response.headers.get('X-RateLimit-Remaining')}")
+        print(f"Rate limit reset: {response.headers.get('X-RateLimit-Reset')}")
+    
     response.raise_for_status()
     results = response.json()
     
