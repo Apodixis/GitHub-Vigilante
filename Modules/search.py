@@ -244,12 +244,18 @@ def organization_search(
     for org_login in logins:
         prior_member_count = len(members_by_login)
         query = queries.graphQL_organizations_exact_query(org_login)
-        target_org, members_by_login = client.graphql_organization_exact_request(
-            token,
-            query,
-            org_login,
-            members_by_login,
-        )
+        
+        # error handling for input organizations with invalid logins (no corresponding account exists)
+        try:
+            target_org, members_by_login = client.graphql_organization_exact_request(
+                token,
+                query,
+                org_login,
+                members_by_login,
+            )
+        except ValueError:
+            print(f"{org_login} skipped: Invalid Login")
+            continue
         
         org_rows.extend(target_org)
         fetched_this_org = len(members_by_login) - prior_member_count

@@ -242,9 +242,17 @@ def graphql_organization_exact_request(
         response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
         response.raise_for_status()
         payload = response.json()
-            
+        
+        # error handling
         if payload.get("errors"):
+            org_not_found = any(
+                error.get("type") == "NOT_FOUND" and error.get("path") == ["organization"]
+                for error in payload["errors"]
+            )
+            if org_not_found:
+                raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
             raise RuntimeError(f"GraphQL error: {payload['errors']}")
+        
         
         org = payload.get("data", {}).get("organization")
         #print(f"Fetched organization payload: {org}")
