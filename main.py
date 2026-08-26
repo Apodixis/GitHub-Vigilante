@@ -178,17 +178,20 @@ if __name__ == '__main__':
     menus.clear_terminal()
     
     if choice == 1: # User Search
-        user_data, target, mode = _user_search(token) # Fetch user data and target username
-        writeToFile.write_to_excel(user_data, target, mode) # Write user data to Excel file
+        results_data, target, mode = _user_search(token) # Fetch user data and target username
     
     elif choice == 2: # Email Search
-        user_data, target, mode = _email_search(token)
-        writeToFile.write_to_excel(user_data, target, mode) # Write user data to Excel file
+        results_data, target, mode = _email_search(token)
     
     elif choice == 3: # Organization Search
-        org_data, target, mode = _organization_search(token)
-        writeToFile.write_to_excel(org_data, target, mode) # Write organization data to Excel file
+        results_data, target, mode = _organization_search(token)
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")
         menus.quit_program()
+    
+    if not results_data:
+        print("\nNO RESULTS RETURNED")
+        menus.quit_program()
+    else:
+        writeToFile.write_to_excel(results_data, target, mode) # Write results data to an Excel file
