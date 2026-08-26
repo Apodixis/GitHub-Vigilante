@@ -9,12 +9,11 @@ def _sanitize_excel_value(value):
 		return ILLEGAL_CHARACTERS_RE.sub("", value)
 	return value
 
-def write_user_search_exact_to_excel(user_data, target, search_mode) -> str:
+def write_to_excel(user_data, target, search_mode) -> str:
 	"""
-	Writes user exact search results (without enrichment) to an Excel file.
-	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target_user}.xlsx"
-	user_data: list of user dicts (target_user + followership)
-	target_user: str, the username searched
+	Writes search results (without enrichment) to an Excel file.
+	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target}.xlsx"
+	data: outer dict key values used as column headers, outer dict field values used in corresponding column cell values
 	"""
 	# Create workbook and worksheet
 	wb = openpyxl.Workbook()

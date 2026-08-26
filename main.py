@@ -179,15 +179,15 @@ if __name__ == '__main__':
     
     if choice == 1: # User Search
         user_data, target, mode = _user_search(token) # Fetch user data and target username
-        writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
+        writeToFile.write_to_excel(user_data, target, mode) # Write user data to Excel file
     
     elif choice == 2: # Email Search
         user_data, target, mode = _email_search(token)
-        writeToFile.write_user_search_exact_to_excel(user_data, target, mode) # Write user data to Excel file
+        writeToFile.write_to_excel(user_data, target, mode) # Write user data to Excel file
     
     elif choice == 3: # Organization Search
         org_data, target, mode = _organization_search(token)
-        writeToFile.write_user_search_exact_to_excel(org_data, target, mode) # Write organization data to Excel file
+        writeToFile.write_to_excel(org_data, target, mode) # Write organization data to Excel file
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")
