@@ -26,7 +26,7 @@ def graphql_user_exact_request(
     Method: GitHub GraphQL API with pagination.
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
-    headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
     if followership is None:
         followership = {}
@@ -152,7 +152,7 @@ def graphql_user_partial_request(
     Method: GitHub GraphQL API with pagination.
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
-    headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     cursor: Optional[str] = None
     normalized_users: List[Dict] = []
     
@@ -242,7 +242,7 @@ def graphql_organization_exact_request(
     Method: GitHub GraphQL API with pagination.
     Information (per Organization/member): Login, createdAt, Name, Email, social accounts, Company, Location, membership, Bio.
     """
-    headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
     if members_by_login is None:
         members_by_login = {}
