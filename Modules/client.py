@@ -1,3 +1,5 @@
+from optparse import Option
+
 import requests
 from typing import List, Dict, Tuple, Optional
 import Utils.dataTransformations as transform
@@ -151,28 +153,46 @@ def graphql_user_partial_request(
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
     headers = {"Authorization": f"bearer {token}", "Content-Type": "application/json"}
+    cursor: Optional[str] = None
+    normalized_users: List[Dict] = []
     
-    variables = {
+    while True:
+        variables = {
             "page_size": min(page_size, 100),
-            "social_size": social_size,
+            "social_size": min(social_size, 10),
+            "cursor": cursor
         }
-    
-    response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
-    response.raise_for_status()
-    payload = response.json()
-    
-    if payload.get("errors"):
-        raise RuntimeError(f"GraphQL error: {payload['errors']}")
-    
-    raw_users = list(payload["data"].values())
-    
-    normalized_users = [
-        transform.normalize_user(user)
-        for user in raw_users
-        if user
-    ]
-    
-    #print(f"Fetched user payload: {normalized_users}")
+        
+        response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+        
+        if payload.get("errors"):
+            raise RuntimeError(f"GraphQL error: {payload['errors']}")
+        
+        search = payload["data"]["search"]
+        if not search:
+            break
+        
+        raw_users = search.get("nodes") or []
+        
+        normalized_users.extend(
+            transform.normalize_user(user)
+            for user in raw_users
+            if user
+        )
+        
+        page_info = search.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            break
+        
+        next_cursor = page_info.get("endCursor")
+        if not next_cursor or next_cursor == cursor:
+            raise RuntimeError(
+                "GraphQL pagination error: next cursor is missing or is unchanged."
+            )
+        
+        cursor = next_cursor
     
     return normalized_users
 

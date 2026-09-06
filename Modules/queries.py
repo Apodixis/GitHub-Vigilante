@@ -51,26 +51,31 @@ def graphQL_user_exact_query(login) -> str:
     }}
 """
 
-def graphQL_build_partial_user_query(user_logins) -> str:
+def graphQL_user_partial_query(login) -> str:
     """
-    Inputs: Target User login.
-    Outputs: GraphQL User query string.
-    Method: Variable insertion format string, iterative query development.
+    Inputs: Target user search string.
+    Outputs: GraphQL user search query string.
+    Method: Variable insertion format string.
     """
-    query = f"""query partialUserQuery {{
-    """
-    for i, login in enumerate(user_logins):
-        userIndex = str(i)
-        login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
-        query += f"""   user{userIndex}: user(login: {login_literal}) {{
-            login createdAt updatedAt name email company location bio
-            socialAccounts(first: 10) {{
-                nodes {{ url }}
+    search_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
+    return f"""
+    query testRestMigration($page_size: Int = 100, $social_size: Int = 10, $cursor: String) {{
+        search(query: {search_literal}, type: USER, first: $page_size, after: $cursor) {{
+            pageInfo {{ hasNextPage endCursor }}
+            nodes {{
+                ... on User {{
+                    login createdAt updatedAt name email company location bio
+                    socialAccounts(first: $social_size) {{
+                        nodes {{ url }}
+                    }}
+                    organizations(first: $page_size) {{
+                        nodes {{ login }}
+                    }}
                 }}
-            }}"""
-    query += f"}}"
-    
-    return query
+            }}
+        }}
+    }}
+"""
 
 #============================================================================================
 

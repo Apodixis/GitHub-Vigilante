@@ -59,33 +59,8 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     Method: GitHub GraphQL API with pagination.
     Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs.
     """
-    i = 1
-    results: list[dict] = []
-    while i <= 10: # GitHub Search API is capped to 1000 results (10 pages at per_page=100).
-        base_url = "https://api.github.com/search/users"
-        params = {
-            "q": f"{login_substring} in:login",
-            "per_page": 100,
-            "page": i
-        }
-        users = client.rest_request(token, base_url, params=params)
-        page_users = users.get("items", [])
-        
-        if not page_users:
-            break
-        
-        page_logins = []
-        for user in page_users:
-            if user.get("type") == "User":
-                page_logins.append(user["login"])
-        
-        if page_logins:
-            query = queries.graphQL_build_partial_user_query(page_logins)
-            page_results = client.graphql_user_partial_request(token, query)
-            results.extend(page_results)
-            print(f"{len(page_results)} user records fetched from page {i}. Total records fetched: {len(results)}")
-        
-        i += 1
+    query = queries.graphQL_user_partial_query(login_substring) # Construct the GraphQL query string for current target user
+    results = client.graphql_user_partial_request(token, query)
     
     #print(results)
     return results, login_substring
