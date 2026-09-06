@@ -325,5 +325,6 @@ def graphql_organization_exact_request(
     
     normalized_target = transform.normalize_org(org)
     normalized_target["membership"] = "N/A"
+    normalized_target["membership_count"] = "N/A"
     
     return [normalized_target], members_by_login

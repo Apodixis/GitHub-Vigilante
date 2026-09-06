@@ -61,6 +61,7 @@ def normalize_user(node: Dict) -> Dict:
         "company": node.get("company"),
         "location": node.get("location"),
         "organizations": organizations,
+        "org_count": len(organizations),
         "bio": node.get("bio"),
     }
 

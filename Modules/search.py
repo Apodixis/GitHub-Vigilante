@@ -241,6 +241,7 @@ def organization_search(
         membership_value = member.get("membership")
         if isinstance(membership_value, set):
             member["membership"] = sorted(membership_value)
+            member["membership_count"] = len(member["membership"])
     
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Orgs"
     
