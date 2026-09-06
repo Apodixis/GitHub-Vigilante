@@ -13,7 +13,7 @@ def graphQL_user_exact_query(login) -> str:
     """
     login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
-    query getAllUserInformation($page_size: Int = 100, $social_size: Int = 10, $following_cursor: String, $followers_cursor: String) {{
+    query userExactSearch($page_size: Int = 100, $social_size: Int = 10, $following_cursor: String, $followers_cursor: String) {{
         user(login: {login_literal}) {{
             login createdAt updatedAt name email company location bio
             socialAccounts(first: $social_size) {{
@@ -59,7 +59,7 @@ def graphQL_user_partial_query(login) -> str:
     """
     search_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
-    query testRestMigration($page_size: Int = 100, $social_size: Int = 10, $cursor: String) {{
+    query userPartialSearch($page_size: Int = 100, $social_size: Int = 10, $cursor: String) {{
         search(query: {search_literal}, type: USER, first: $page_size, after: $cursor) {{
             pageInfo {{ hasNextPage endCursor }}
             nodes {{
@@ -87,7 +87,7 @@ def graphQL_organizations_exact_query(orgLogin: str) -> str:
     """
     orgLogin_literal = json.dumps(orgLogin) # Ensure orgLogin is properly escaped for GraphQL query
     return f"""
-    query getOrganizationInformation($page_size: Int = 100, $members_cursor: String) {{
+    query organizationExactSearch($page_size: Int = 100, $members_cursor: String) {{
         organization(login: {orgLogin_literal}) {{
             login createdAt updatedAt name email location isVerified twitterUsername websiteUrl description
             membersWithRole(first: $page_size, after: $members_cursor) {{
