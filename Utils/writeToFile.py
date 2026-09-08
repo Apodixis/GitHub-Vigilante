@@ -9,10 +9,10 @@ def _sanitize_excel_value(value):
 		return ILLEGAL_CHARACTERS_RE.sub("", value)
 	return value
 
-def write_to_excel(user_data, target, search_mode) -> str:
+def write_to_excel(user_data, target, search_mode, enriched="") -> str:
 	"""
-	Writes search results (without enrichment) to an Excel file.
-	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target}.xlsx"
+	Writes search results (without optional enrichment) to an Excel file.
+	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target}{enriched}.xlsx"
 	data: outer dict key values used as column headers, outer dict field values used in corresponding column cell values
 	"""
 	# Create workbook and worksheet
@@ -55,7 +55,7 @@ def write_to_excel(user_data, target, search_mode) -> str:
     
 	# Build filename and path to Downloads
 	date_str = datetime.now().strftime("%Y%m%d%H%M")
-	filename = f"{date_str}{search_mode}_{target}.xlsx"
+	filename = f"{date_str}{search_mode}_{target}{enriched}.xlsx"
 	downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
 	file_path = os.path.join(downloads_folder, filename)
     

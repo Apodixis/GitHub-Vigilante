@@ -130,9 +130,11 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     
     choice = menus.enrichment_prompt()
     if choice == "1": # enrich current results data, takes significantly longer
+        enriched = "_Enriched" # leading underscore included to match outfile naming convention
         user_data = transform.user_commit_history(token, user_data)
     
     elif choice == "2": # skip enrichment
+        enriched = ""
         pass
     
     end_time = time.perf_counter()
@@ -140,7 +142,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
     #print(user_data)
-    return user_data, target, mode
+    return user_data, target, mode, enriched
 
 def _email_search(token):
     mode = "EmailPseudonymHistory"
@@ -186,7 +188,7 @@ if __name__ == '__main__':
     menus.clear_terminal()
     
     if choice == 1: # User Search
-        results_data, target, mode = _user_search(token) # Fetch user data and target username
+        results_data, target, mode, enriched = _user_search(token) # Fetch user data and target username
     
     elif choice == 2: # Email Search
         results_data, target, mode = _email_search(token)
@@ -202,4 +204,4 @@ if __name__ == '__main__':
         print("\nNO RESULTS RETURNED")
         menus.quit_program()
     else:
-        writeToFile.write_to_excel(results_data, target, mode) # Write results data to an Excel file
+        writeToFile.write_to_excel(results_data, target, mode, enriched) # Write results data to an Excel file
