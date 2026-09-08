@@ -45,10 +45,29 @@ def multiple_input_prompt(target_type: str) -> set[str]:
     return targets
 
 def user_search_mode() -> str:
-    # Menu for selecting user search mode when running main.py
+    """
+    Menu for selecting user search mode when running main.py
+    Returns the user's choice as a string ("1" or "2")
+    """
     clear_terminal()
     print("1) User Search - Exact Match") # Finds information for a specific user: (User, Followership, and Stargazing)
     print("2) User Search - Partial Match") #Finds users based on partial matches (will likely return multiple results)
+    
+    while True:
+        choice = input("Enter 1 or 2: ").strip()
+        if choice == "1" or choice == "2":
+            return choice
+        else:
+            print("Invalid selection. Please enter 1 or 2.")
+
+def enrichment_prompt() -> str:
+    """
+    Menu for selecting if the user would like to enrich the current results data
+    Returns the user's choice as a string ("1" or "2")
+    """
+    clear_terminal()
+    print("1) Enrich Results: Will take significantly longer") # Additional calls to enrichment functions and HTTP response delays
+    print("2) Skip Enrichment") # Skips the enrichment step
     
     while True:
         choice = input("Enter 1 or 2: ").strip()

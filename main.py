@@ -128,8 +128,12 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         user_data, target = search.user_search_partial(token, target_substring)
     
-    # enrich user data with email addresses and evidence of timestomping sourced from historic commit metadata
-    user_data = transform.user_commit_history(token, user_data)
+    choice = menus.enrichment_prompt()
+    if choice == "1": # enrich current results data, takes significantly longer
+        user_data = transform.user_commit_history(token, user_data)
+    
+    elif choice == "2": # skip enrichment
+        pass
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
