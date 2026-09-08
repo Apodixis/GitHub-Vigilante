@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit, urlunsplit
 from typing import Dict
+import Modules.client as client
 
 def normalize_url(raw: str) -> str:
     """
@@ -112,6 +113,7 @@ def compare_user_relations(following: list, followers: list) -> list:
     all_logins = set(following_dict.keys()) | set(followers_dict.keys())
     relations = []
     
+    # user followership comparisons
     for login in all_logins:
         if login in following_dict and login in followers_dict:
             user = following_dict[login].copy()
@@ -127,5 +129,90 @@ def compare_user_relations(following: list, followers: list) -> list:
             user = followers_dict[login].copy()
             user['_relation'] = 'follower'
             relations.append(user)
+    # --
     
     return relations
+
+def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrichment function
+    """
+    Inputs: List of user dicts and personal access token
+    Outputs: List of user dicts with head and tail commit history enrichment
+    Method: GitHub REST API search endpoint
+    Information (per User): Email, Timestomped commits? (bool)
+    """
+    base_url = "https://api.github.com/search/commits"
+    order = ["asc", "desc"]
+    
+    print("Beginning results enrichment from commit history data")
+    i = 0
+    for user in results:
+        i += 1
+        
+        user["timestompedCommits"] = False # initialize "timestompedCommits" key
+        login = user.get("login")
+        if not login:
+            continue
+        
+        total_count: int | None = None
+        
+        # Ensure emails are stored as a set for consistent processing
+        emails = user.get("emails")
+        if isinstance(emails, set):
+            pass
+        elif isinstance(emails, str):
+            emails = {emails}
+        else:
+            emails = set(emails or [])
+        user["emails"] = emails
+        # --
+        
+        for sort_order in order: # iterate over first and last 100 commits (head/tail sampling to reduce total API calls)
+            if sort_order == "desc" and total_count is not None and total_count <= 100: # prevent unnecessary API calls for small result sets
+                break
+            
+            per_page = 100 if total_count is None or total_count > 200 else total_count - 100
+            params={
+                "q": f"author:{login}",
+                "per_page": per_page,
+                "page": 1,
+                "sort": "committer-date",
+                "order": sort_order,
+            }
+            
+            # REST API rate limit handling (prevents exceeding 30 requests per minute)
+            response = client.rest_request(token, base_url, params=params)
+            # --
+            
+            if total_count is None:
+                total_count = response.get("total_count", 0)
+                
+            commits = [item for item in response.get("items", []) if isinstance(item, dict)]
+            
+            if not commits:
+                break
+            
+            # commit data processing
+            if sort_order == "asc":
+                first_committer = ((commits[0].get("commit") or {}).get("committer") or {}).get("date")
+                
+                if first_committer and user.get("createdAt") and first_committer < user.get("createdAt"): # first commit is older than account
+                    user["timestompedCommits"] = True
+            
+            for item in commits:
+                email = (item.get("commit", {}).get("committer") or {}).get("email")
+                committed_date = (item.get("commit", {}).get("committer") or {}).get("date")
+                authored_date = (item.get("commit", {}).get("author") or {}).get("date")
+                
+                if committed_date and authored_date and committed_date < authored_date: # code pushed before it was created
+                    user["timestompedCommits"] = True
+                
+                if email and "noreply" not in email:
+                    user["emails"].add(email)
+            # -- end of commit data processing
+            
+            if total_count <= 100: # protects against unnecessary pagination for small result sets
+                break
+            
+        print(f"Commit history data retrieved for login {login}: {i} of {len(results)} user records")
+    
+    return results

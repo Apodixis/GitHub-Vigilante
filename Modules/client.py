@@ -1,7 +1,7 @@
-from optparse import Option
-
-import requests
-from typing import List, Dict, Tuple, Optional
+import re
+import requests, time
+from collections import deque
+from typing import List, Dict, Tuple, Optional, Any
 import Utils.dataTransformations as transform
 
 """
@@ -9,6 +9,40 @@ Central location for sending HTTP requests and handling response contents
 """
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+
+# Variable declarations for rate limit safeguards
+max_requests_per_minute = 20 # conservative request limit to avoid GitHub's unpredictable secondary rate limits
+rate_limit_window = 60.0
+request_delay = rate_limit_window / max_requests_per_minute
+_request_times: deque[float] = deque(maxlen=max_requests_per_minute)
+# --
+
+def _wait_for_rest_window() -> None: # helper function
+    '''
+    Safety measure that prevents exceeding the REST API rate limit by enforcing a sliding request window.
+    '''
+    # REST API rate limit handling (prevents exceeding 30 requests per minute)
+    now = time.monotonic()
+    
+    while _request_times and (now - _request_times[0] >= rate_limit_window):
+        _request_times.popleft()
+    
+    if len(_request_times) >= max_requests_per_minute:
+        delay = rate_limit_window - (now - _request_times[0])
+        time.sleep(max(delay, 0))
+        
+        now = time.monotonic()
+        
+        while _request_times and (now - _request_times[0] >= rate_limit_window):
+            _request_times.popleft()
+    
+    if _request_times:
+        delay = request_delay - (now - _request_times[-1])
+        if delay > 0:
+            time.sleep(delay)
+            now = time.monotonic()
+    
+    _request_times.append(now)
 
 def graphql_user_exact_request(
     token: str,
@@ -198,33 +232,76 @@ def graphql_user_partial_request(
 
 #============================================================================================
 
-def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Dict:
+def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
     """
-    Inputs: GitHub Personal Access Token and complete REST API Query URL.
-    Outputs: Response.json data (Results)
+    Inputs: GitHub Personal Access Token, base REST API Query URL, and query parameters
+    Outputs: Decoded JSON response body (Results)
     Method: REST API request with token authorization
-    Information: All records 
     """
-    headers = {"Accept": "application/vnd.github+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    response = requests.get(url, headers=headers, params=params, timeout=(10,10)) # 10s connect, 10s read timeout
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     
-    # http response error notification    
-    if response.status_code == 403:
-        remaining = response.headers.get("X-RateLimit-Remaining")
-        reset = response.headers.get("X-RateLimit-Reset")
+    # up to three requests (initial + 2 retries) for resiliency
+    for attempt in range(3):
+        # Apply the shared sliding-window throttle before each request attempt.
+        _wait_for_rest_window()
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=(20, 20))
+        except requests.exceptions.RequestException as error:
+            if attempt < 2:
+                print(f"Request failed for {url}: {error}. Retrying.")
+                continue
+            
+            print(f"Request failed after 3 attempts for {url}: {error}")
+            return {
+                "total_count": 0,
+                "items": [],
+            }
         
-        print(f"GitHub API rate limit exhausted. Remaining: {remaining}")
-        print(f"Rate limit resets at Unix timestamp: {reset}")
+        if response.status_code == 422: # catches queries for users with no public commits
+            print(f"GitHub rejected the commit search: {response.url}")
+            return {
+                "total_count": 0,
+                "items": []
+            }
         
-        if remaining == "0":
-            return {}
+        if response.status_code not in (403, 429):
+            response.raise_for_status()
+            return response.json()
+        
+        reset_value = response.headers.get("X-RateLimit-Reset")
+        retry_after = response.headers.get("Retry-After")
+        
+        if retry_after:
+            try:
+                delay = max(float(retry_after), 0)
+            except ValueError:
+                delay = rate_limit_window
+        else:
+            if not reset_value:
+                reset_match = re.search(
+                    r"Rate limit resets at Unix timestamp:\s*(\d+(?:\.\d+)?)",
+                    response.text,
+                    flags=re.IGNORECASE,
+                )
+                reset_value = reset_match.group(1) if reset_match else None
+            
+            if reset_value:
+                try:
+                    delay = max((float(reset_value) + request_delay) - time.time(), 0) # waits 2 more seconds past the reset time
+                except ValueError:
+                    delay = rate_limit_window
+            else:
+                delay = rate_limit_window
+        
+        if attempt == 2:
+            print(f"GitHub rate-limited the request with status {response.status_code}.")
+            print(f"Response: {response.text}")
+            response.raise_for_status()
+        
+        print(f"GitHub rate-limited the request. Retrying in {delay:.1f} seconds.")
+        time.sleep(delay)
     
-    response.raise_for_status()
-    results = response.json()
-    
-    return results
+    raise RuntimeError("REST request failed after rate-limit retries.")
 
 #============================================================================================
 
@@ -258,7 +335,7 @@ def graphql_organization_exact_request(
             "page_size": min(page_size, 100),
             "members_cursor": members_cursor,
         }
-            
+        
         response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query, "variables": variables}, headers=headers)
         response.raise_for_status()
         payload = response.json()
@@ -272,7 +349,6 @@ def graphql_organization_exact_request(
             if org_not_found:
                 raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
             raise RuntimeError(f"GraphQL error: {payload['errors']}")
-        
         
         org = payload.get("data", {}).get("organization")
         #print(f"Fetched organization payload: {org}")

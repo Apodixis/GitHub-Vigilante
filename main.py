@@ -1,8 +1,10 @@
 import os, time, requests
 from pathlib import Path
-import Modules.search as search
-import Utils.menus as menus
-import Utils.writeToFile as writeToFile
+
+import Utils.menus as menus # used to print option trees and to handle user input collection
+import Modules.search as search # consists of logic for each search method
+import Utils.dataTransformations as transform # used for transforming and enriching GitHub user data
+import Utils.writeToFile as writeToFile # used to write results to file (.xlsx)
 
 #--------------------------------------------------------------------------------
 ## GITHUB PERSONAL ACCESS TOKEN DECLARATION
@@ -126,13 +128,15 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         user_data, target = search.user_search_partial(token, target_substring)
     
-    #print(user_data)
+    # enrich user data with email addresses and evidence of timestomping sourced from historic commit metadata
+    user_data = transform.user_commit_history(token, user_data)
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    return user_data, target, mode # returns target user for inclusion in file naming convention
+    #print(user_data)
+    return user_data, target, mode
 
 def _email_search(token):
     mode = "EmailPseudonymHistory"
