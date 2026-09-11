@@ -1,6 +1,9 @@
 from urllib.parse import urlsplit, urlunsplit
 from typing import Dict
 import Modules.client as client
+import Modules.queries as queries
+
+ignore_email_substrings = ["noreply", "github-actions", "[bot]"]
 
 def normalize_url(raw: str) -> str:
     """
@@ -49,8 +52,12 @@ def normalize_user(node: Dict) -> Dict:
     email_val = node.get("email")
     emails = set() # Convert to set to support future scraping/querying to harvest additional emails
     
-    if email_val:
-        emails.add(email_val)
+    # checks to exclude invalid or ignored email addresses
+    if email_val and not any(
+        substring in email_val.casefold()
+        for substring in ignore_email_substrings
+    ):
+        emails.add(email_val.casefold())
     
     return {
         "login": node.get("login"),
@@ -87,7 +94,7 @@ def normalize_org(node: Dict) -> Dict:
     
     # Normalize org email(s) to set for consistency with user normalization
     email_val = node.get("email")
-    emails = {email_val} if email_val else set()
+    emails = {email_val.casefold()} if email_val else set()
     
     return {
         "login": node.get("login"),
@@ -134,6 +141,116 @@ def compare_user_relations(following: list, followers: list) -> list:
     return relations
 
 def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrichment function
+    """
+    Inputs: List of user dicts and personal access token
+    Outputs: List of user dicts with head and tail commit history enrichment
+    Method: GitHub REST API search endpoint
+    Information (per User): Email, Timestomped commits? (bool)
+    """
+    # calculate batch sizes for us in queries
+    for user in results:
+        user["timestompedCommits"] = False
+    
+    repo_count = 3
+    nodes_per_repo = 3 
+    user_count = 300//(repo_count*2*nodes_per_repo) # multiplied by two to account for head and tail queries
+    logins = [user["login"] for user in results if user.get("login")]
+    
+    # creates a lookup dictionary for results by login (case-insensitive)
+    results_by_login = {
+        user["login"].casefold(): user
+        for user in results
+        if user.get("login")
+    }
+    
+    # process users in batches for token-efficient graphQL querying (1 token per request)
+    for i in range(0,len(logins), user_count):
+        batch_logins = logins[i:i+user_count]
+        
+        initial_query = queries.graphQL_commit_enrichment_query_1(batch_logins, repo_count)
+        initial_results = client.graphQL_raw_request(token, initial_query)
+        
+        repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]] = []
+        
+        # extract [user, {repo: commit_oid}] for each repoWithName and oid pair
+        for k, v in initial_results.items():
+            if not k.startswith(("oldestRepos", "newestRepos")):
+                continue
+            
+            for repository in v["repositories"]["nodes"]:
+                user, repo = repository["nameWithOwner"].split("/", 1)
+                default_branch = repository.get("defaultBranchRef") or {}
+                
+                if not default_branch: # empty repositories can return None for defaultBranchRef
+                    continue
+                
+                commit_oid = default_branch["target"]["oid"]
+                
+                for existing_user, repositories in repo_commit_pairs_by_user:
+                    if existing_user == user:
+                        repositories[repo] = commit_oid
+                        break
+                else:
+                    repo_commit_pairs_by_user.append((user, {repo: commit_oid}))
+        # --
+        
+        # skip this batch if no repository-commit pairs were found
+        if not repo_commit_pairs_by_user:
+            print(
+                f"No repository-commit pairs found for Batch {i} user(s), skipping."
+            )
+            continue
+        
+        committer_query = queries.graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user)
+        committer_results = client.graphQL_raw_request(token, committer_query)
+        
+        # enumerates owners and accesses their repository data
+        for i, (owner, repositories) in enumerate(repo_commit_pairs_by_user):
+            result_user = results_by_login.get(owner.casefold())
+            if result_user is None:
+                continue
+            
+            emails = result_user.get("emails")
+            if not isinstance(emails, set):
+                emails = set(emails or []) if not isinstance(emails, str) else {emails}
+                result_user["emails"] = emails
+            
+            # enumerates commits and accesses their metadata
+            for j in range(len(repositories)):
+                repository = committer_results.get(f"owner{i}repo{j}") or {}
+                commit = repository.get("object") or {}
+                committer = commit.get("committer") or {}
+                if not committer:
+                    continue
+                
+                committer_user = committer.get("user") or {}
+                committer_login = committer_user.get("login")
+                if not committer_login or committer_login.casefold() != owner.casefold():
+                    continue
+                
+                # checks to exclude invalid or ignored email addresses
+                email = committer.get("email")
+                normalized_email = email.casefold() if email else ""
+                if email and not any(
+                    substring in normalized_email
+                    for substring in ignore_email_substrings
+                ):
+                    emails.add(normalized_email)
+                
+                authored_date = commit.get("authoredDate")
+                committed_date = commit.get("committedDate")
+                created_at = result_user.get("createdAt")
+                
+                # check for commits with forged commit timestamps
+                if (
+                    (committed_date and committed_date < created_at)
+                    or (authored_date and committed_date and committed_date < authored_date)
+                ):
+                    result_user["timestompedCommits"] = True
+    
+    return results
+
+def user_commit_history_REST(token: str, results: list[dict]) -> list[dict]: # enrichment function
     """
     Inputs: List of user dicts and personal access token
     Outputs: List of user dicts with head and tail commit history enrichment
@@ -206,8 +323,12 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                 if committed_date and authored_date and committed_date < authored_date: # code pushed before it was created
                     user["timestompedCommits"] = True
                 
-                if email and "noreply" not in email:
-                    user["emails"].add(email)
+                normalized_email = email.casefold() if email else ""
+                if normalized_email and not any(
+                    substring in normalized_email
+                    for substring in ignore_email_substrings
+                ):
+                    user["emails"].add(normalized_email)
             # -- end of commit data processing
             
             if total_count <= 100: # protects against unnecessary pagination for small result sets

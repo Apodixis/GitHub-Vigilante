@@ -102,3 +102,99 @@ def graphQL_organizations_exact_query(orgLogin: str) -> str:
         }}
     }}
 """
+
+#============================================================================================
+
+def graphQL_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) -> str:
+    """
+    Inputs: One or more User logins and the number of head and tail repositories to fetch per user
+    Outputs: GraphQL User query string
+    Method: Variable insertion format string, iterative query development
+    """
+    query = f"""query FindCommitHeadAndTail {{
+        """
+    
+    for i, login in enumerate(batch_logins):
+        
+        # Error handling for records that do not have an email value
+        if not isinstance(login, str) or not login:
+            continue
+        
+        login_literal = json.dumps(login)
+        
+        i = str(i)
+        query += f"""oldestRepos{i}: user(login: {login_literal}) {{
+            repositories(
+                first: {repo_count}
+                orderBy: {{ field: CREATED_AT, direction: ASC }}
+                ownerAffiliations: OWNER
+                isFork: false
+            ) {{
+                nodes {{
+                    name
+                    nameWithOwner
+                    defaultBranchRef {{
+                        target {{
+                            ... on Commit {{ oid }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        newestRepos{i}: user(login: {login_literal}) {{
+            repositories(
+                first: {repo_count}
+                orderBy: {{ field: CREATED_AT, direction: DESC }}
+                ownerAffiliations: OWNER
+                isFork: false
+            ) {{
+                nodes {{
+                    nameWithOwner
+                    defaultBranchRef {{
+                        target {{
+                            ... on Commit {{ oid }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    """
+    
+    query += f"}}"
+    return query
+
+def graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]]) -> str:
+    """
+    Inputs: One or more user tuples containing information needed to fetch commit information
+    Outputs: GraphQL User query string
+    Method: Variable insertion format string, iterative query development
+    """
+    query = f"""query FetchSpecifiedCommits {{
+        """
+    
+    # enumerates owners and accesses repositories data
+    for i, (owner, repositories) in enumerate(repo_commit_pairs_by_user):
+        owner_literal = json.dumps(owner)
+        
+        # enumerates repositories and accesses repo:commit (oid) pairs
+        for j, (repo, oid) in enumerate(repositories.items()):
+            repo_literal = json.dumps(repo)
+            oid_literal = json.dumps(oid)
+            
+            i, j = str(i), str(j)
+            query += f"""owner{i}repo{j}: repository(owner: {owner_literal}, name: {repo_literal}) {{
+                object(oid: {oid_literal}) {{
+                    ... on Commit {{
+                        authoredDate
+                        committedDate
+                        committer {{
+                            user {{ login }}
+                            name email
+                        }}
+                    }}
+                }}
+            }}
+        """
+    
+    query += f"}}"
+    return query
