@@ -224,6 +224,7 @@ def graphql_user_partial_request(
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     cursor: Optional[str] = None
     normalized_users: List[Dict] = []
+    page_number = 1
     
     while True:
         variables = {
@@ -261,7 +262,9 @@ def graphql_user_partial_request(
                 "GraphQL pagination error: next cursor is missing or is unchanged."
             )
         
+        print(f"Page {page_number}: {len(raw_users)} user records retrieved. Total users: {len(normalized_users)}")
         cursor = next_cursor
+        page_number += 1
     
     return normalized_users
 
