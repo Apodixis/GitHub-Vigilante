@@ -163,6 +163,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
         if user.get("login")
     }
     
+    total_enriched_records = 0
     # process users in batches for token-efficient graphQL querying (1 token per request)
     for i in range(0,len(logins), user_count):
         batch_logins = logins[i:i+user_count]
@@ -194,12 +195,16 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                     repo_commit_pairs_by_user.append((user, {repo: commit_oid}))
         # --
         
-        # skip this batch if no repository-commit pairs were found
-        if not repo_commit_pairs_by_user:
-            print(
-                f"No repository-commit pairs found for Batch {i} user(s), skipping."
-            )
+        total_enriched_records += len(repo_commit_pairs_by_user)
+        
+        # provide progress updates and skip batches with no identified repository-commit pairs
+        if repo_commit_pairs_by_user:
+            print(f"Batch {i // user_count + 1}: {len(repo_commit_pairs_by_user)} user records harvested. Total enriched records: {total_enriched_records}")
+        
+        elif not repo_commit_pairs_by_user:
+            print(f"Batch {i // user_count + 1}: No repository-commit pairs found, skipping.")
             continue
+        # --
         
         committer_query = queries.graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user)
         committer_results = client.graphQL_raw_request(token, committer_query)
