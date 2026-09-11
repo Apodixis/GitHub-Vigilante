@@ -44,6 +44,41 @@ def _wait_for_rest_window() -> None: # helper function
     
     _request_times.append(now)
 
+def graphQL_raw_request(token: str, query: str) -> Dict[str, Any]:
+    """
+    Inputs: GitHub personal access token and a raw GraphQL query
+    Outputs: Raw GraphQL data for the requested fields
+    Method: GraphQL API request with transient-failure retries
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    
+    for attempt in range(3):
+        try:
+            response = requests.post(GITHUB_GRAPHQL_URL, json={"query": query}, headers=headers, timeout=(20, 60))
+            response.raise_for_status()
+            payload = response.json()
+            
+            if payload.get("errors"):
+                raise RuntimeError(f"GraphQL error: {payload['errors']}")
+            
+            return payload.get("data", {})
+        
+        except Exception as error:
+            if attempt == 2:
+                raise
+            
+            delay = 2 ** attempt
+            print(
+                f"GraphQL request failed with {type(error).__name__}: {error}. "
+                f"Retrying in {delay} seconds."
+            )
+            time.sleep(delay)
+    
+    raise RuntimeError("GraphQL request failed after retries.")
+
 def graphql_user_exact_request(
     token: str,
     query: str,

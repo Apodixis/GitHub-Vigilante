@@ -125,6 +125,9 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
                     name = (item.get("commit", {}).get("author") or {}).get("name")
                     email = (item.get("commit", {}).get("author") or {}).get("email")
                     
+                    # normalize email to lowercase for consistent comparison
+                    email = email.casefold() if isinstance(email, str) else email
+                    
                     pair = (login, name, email)
                     if pair in seen:
                         continue
