@@ -204,4 +204,7 @@ if __name__ == '__main__':
         print("\nNO RESULTS RETURNED")
         menus.quit_program()
     else:
+        # declare unused variables used in writeToFile() to avoid errors
+        enriched = "" if not locals().get("enriched") else enriched
+        
         writeToFile.write_to_excel(results_data, target, mode, enriched) # Write results data to an Excel file

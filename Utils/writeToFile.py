@@ -9,7 +9,7 @@ def _sanitize_excel_value(value):
 		return ILLEGAL_CHARACTERS_RE.sub("", value)
 	return value
 
-def write_to_excel(user_data, target, search_mode, enriched="") -> str:
+def write_to_excel(user_data, target, search_mode, enriched) -> str:
 	"""
 	Writes search results (without optional enrichment) to an Excel file.
 	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target}{enriched}.xlsx"
