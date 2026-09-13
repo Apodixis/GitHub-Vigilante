@@ -1,26 +1,32 @@
 import os, openpyxl
+import re
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from datetime import datetime
 
 def _sanitize_excel_value(value):
-	"""Remove control characters that openpyxl cannot store in worksheet cells."""
+	"""
+	Input: value (str)
+	Output: String sanitized of control characters
+	Method: Use regular expression to remove control characters that openpyxl cannot store in worksheet cells
+	"""
+	ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
 	if isinstance(value, str):
 		return ILLEGAL_CHARACTERS_RE.sub("", value)
 	return value
 
 def write_to_excel(user_data, target, search_mode, enriched) -> str:
 	"""
-	Writes search results (without optional enrichment) to an Excel file.
-	The file is named as: f"{YYYYMMDDHHMM}{search_mode}_{target}{enriched}.xlsx"
-	data: outer dict key values used as column headers, outer dict field values used in corresponding column cell values
+	Inputs: user_data (search results), Target(s), search mode, and enriched (bool)
+	Outputs: Excel file using the following file naming convention: f"{YYYYMMDDHHMM}{search_mode}_{target}{enriched}.xlsx"
+	Method: Write search results (without optional enrichment) to an Excel file
 	"""
 	# Create workbook and worksheet
 	wb = openpyxl.Workbook()
 	ws = wb.active
 	ws.title = search_mode
     
-	# Preserve column order: start with keys from first user, append any new keys found in others
+	# Preserve column order: start with keys from first user, append any new keys found in other users
 	if user_data:
 		all_keys = list(user_data[0].keys())
 		for user in user_data[1:]:

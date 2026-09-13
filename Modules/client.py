@@ -46,7 +46,7 @@ def _wait_for_rest_window() -> None: # helper function
 
 def graphQL_raw_request(token: str, query: str) -> Dict[str, Any]:
     """
-    Inputs: GitHub personal access token and a raw GraphQL query
+    Inputs: GitHub Personal Access Token and a raw GraphQL query
     Outputs: Raw GraphQL data for the requested fields
     Method: GraphQL API request with transient-failure retries
     """
@@ -90,10 +90,10 @@ def graphql_user_exact_request(
     social_size: int = 10,
 ) -> Tuple[Dict, Dict[str, Dict]]:
     """
-    Inputs: GitHub username (login) and personal access token.
-    Outputs: Target user profile dict, followership list.
-    Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Inputs: GitHub Personal Access Token, GraphQL query, GitHub username (login), and GraphQL query variables
+    Outputs: Target user profile dict, followership list
+    Method: GitHub GraphQL API with pagination
+    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
@@ -216,10 +216,10 @@ def graphql_user_partial_request(
     social_size: int = 10,
 ) -> List[Dict]:
     """
-    Inputs: GitHub username (login) and personal access token.
-    Outputs: Matched user profile dicts.
-    Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Inputs: GitHub Personal Access Token, GitHub user login substring, and GraphQL query variables
+    Outputs: List of user dicts for matched GitHub users
+    Method: GitHub GraphQL API with pagination
+    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     cursor: Optional[str] = None
@@ -272,7 +272,7 @@ def graphql_user_partial_request(
 
 def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
     """
-    Inputs: GitHub Personal Access Token, base REST API Query URL, and query parameters
+    Inputs: GitHub Personal Access Token, base REST API URL, and query parameters
     Outputs: Decoded JSON response body (Results)
     Method: REST API request with token authorization
     """
@@ -352,10 +352,10 @@ def graphql_organization_exact_request(
     page_size: int = 100,
 ) -> Tuple[List[Dict], Dict[str, Dict]]:
     """
-    Inputs: GitHub personal access token, graphQL Organizations query, and a GitHub organization login
-    Outputs: List of Organization dicts, and a deduplicated members dict (keyed by member login).
-    Method: GitHub GraphQL API with pagination.
-    Information (per Organization/member): Login, createdAt, Name, Email, social accounts, Company, Location, membership, Bio.
+    Inputs: GitHub Personal Access Token, GraphQL Organizations query, GitHub organization login, and GraphQL query variables
+    Outputs: List of Organization dicts, and a deduplicated members dict (keyed by member login)
+    Method: GitHub GraphQL API with pagination
+    Information (per Organization/member): Login, createdAt, Name, Email, social accounts, Company, Location, membership, Bio
     """
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     

@@ -4,10 +4,10 @@ import Modules.queries as queries
 
 def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
-    Inputs: GitHub username (login) and personal access token.
-    Outputs: Target user profile dict w/ followership relationships added.
+    Inputs: GitHub Personal Access Token and one or more GitHub User logins
+    Outputs: List of target User profile dicts with followership relationships added
     Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     if isinstance(login, str):
         logins = [login]
@@ -53,10 +53,10 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
 
 def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], str]:
     """
-    Inputs: GitHub username and personal access token.
-    Outputs: Target user profile dict w/ followership relationships added.
-    Method: GitHub GraphQL API with pagination.
-    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs.
+    Inputs: GitHub Personal Access Token and a GitHub User login substring
+    Outputs: List of target User profile dicts matching the login substring
+    Method: GitHub GraphQL API with pagination
+    Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     query = queries.graphQL_user_partial_query(login_substring) # Construct the GraphQL query string for current target user
     results = client.graphql_user_partial_request(token, query)
@@ -68,10 +68,10 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
 
 def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[list[dict], str]:
     """
-    Inputs: GitHub personal access token and target email addresses.
-    Outputs: List of pseudonymous user profiles associated with the target emails.
-    Method: GitHub Search API for commits with pagination.
-    Information (per User): Login, Name, Email.
+    Inputs: GitHub Personal Access Token and target email addresses
+    Outputs: List of pseudonymous User dicts associated with the target emails
+    Method: GitHub Search API for commits with pagination
+    Information (per User): Login, Name, Email
     """
     base_url = "https://api.github.com/search/commits"
     results: list[dict] = []
@@ -180,10 +180,10 @@ def organization_search(
     login: str | Iterable[str],
 ) -> tuple[list[dict], str]:
     """
-    Inputs: GitHub organization name(s) (login) and personal access token.
-    Outputs: Organization profile dicts plus deduplicated member dicts, and target label.
-    Method: GitHub GraphQL API with pagination.
-    Information (per Organization): Login, createdAt, updatedAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description.
+    Inputs: GitHub Personal Access Token and GitHub Organization login(s)
+    Outputs: Organization profile dicts plus deduplicated Member dicts, and target label
+    Method: GitHub GraphQL API with pagination
+    Information (per Organization): Login, createdAt, updatedAt, Name, Email, Location, isVerified, twitterUsername, websiteUrl, Description
     """
     if isinstance(login, str):
         logins = [login]

@@ -40,8 +40,9 @@ if not token:
 
 def validate_personal_access_token(token: str) -> tuple[bool, str]:
     """
-    Validates the provided GitHub Personal Access Token by making a request to the GitHub REST API.
-    Returns a tuple (is_valid, message) indicating whether the token is valid and an associated message.
+    Input: GitHub Personal Access Token
+    Output: Tuple (is_valid, message) indicating whether the token is valid and an associated message
+    Method: REST API request with token authorization to confirm token validity
     """
     url = "https://api.github.com/user"
     headers = {
@@ -96,10 +97,8 @@ def _decision_tree() -> int:
 def _user_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
-    1. Exact: Returns info on the input user and their followership and stargazing relationships
-    2. Partial: Returns info on all users returned by the partial search query. User info includes followership and stargazing relationships. (This may return a large number of users, depending on the search term.)
-    3. PLACEHOLDER
-    4. PLACEHOLDER
+    1. Exact: Returns info on the input User(s) and their followership and stargazing relationships
+    2. Partial: Returns info on all Users returned by the partial search query. User info includes followership and stargazing relationships. (This may return a large number of users, depending on the search term.)
     '''
     search_mode = menus.user_search_mode() # User Search Mode Selection
     menus.clear_terminal()
@@ -162,7 +161,7 @@ def _email_search(token):
 def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching Organization and members info. Intersect search mode can identify users holding significant membership to multiple suspicious organizations:
-    1. Exact: Returns info on the input organizations and its members (useful for preliminary exploration of suspected malicious organizations).
+    1. Exact: Returns info on the input Organizations and their members (useful for preliminary exploration of suspected malicious organizations).
     '''
     mode = "OrganizationSearch"
     

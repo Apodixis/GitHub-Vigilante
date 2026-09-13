@@ -23,7 +23,8 @@ def clear_terminal() -> None:
 def multiple_input_prompt(target_type: str) -> set[str]:
     """
     Prompts the user for multiple inputs of a specified target type.
-    Returns the inputs as a set of unique strings.
+    Input: String specifying target type (used to alter user input prompt)
+    Output: Set of one or more unique inputs for use in the selected search method
     """
     targets: set[str] = set()
     print(f"Enter {target_type} login values")
@@ -47,7 +48,7 @@ def multiple_input_prompt(target_type: str) -> set[str]:
 def user_search_mode() -> str:
     """
     Menu for selecting user search mode when running main.py
-    Returns the user's choice as a string ("1" or "2")
+    Output: Returns the user's choice as a string ("1" or "2")
     """
     clear_terminal()
     print("1) User Search - Exact Match") # Finds information for a specific user: (User, Followership, and Stargazing)
@@ -63,7 +64,7 @@ def user_search_mode() -> str:
 def enrichment_prompt() -> str:
     """
     Menu for selecting if the user would like to enrich the current results data
-    Returns the user's choice as a string ("1" or "2")
+    Output: Returns the user's choice as a string ("1" or "2")
     """
     clear_terminal()
     print("1) Enrich Results: Will take longer") # Additional calls to enrichment functions and HTTP response delays

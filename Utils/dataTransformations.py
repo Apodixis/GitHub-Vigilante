@@ -7,8 +7,8 @@ ignore_email_substrings = ["noreply", "github-actions", "[bot]"]
 
 def normalize_url(raw: str) -> str:
     """
-    Inputs: Raw URL string.
-    Outputs: Normalized URL string.
+    Inputs: Raw URL string
+    Outputs: Normalized URL string
     Method: Cleans URL of whitespace and trailing punctuation, converts http to https, removes 'www.' if present.
     """
     if not raw:
@@ -30,10 +30,10 @@ def normalize_url(raw: str) -> str:
 
 def normalize_user(node: Dict) -> Dict:
     """
-    Inputs: User dict from GraphQL response.
-    Outputs: Normalized user dict.
-    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects.
-    Information (per User): login, createdAt, name, emails, socialAccounts, company, location, organizations, bio.
+    Inputs: User dict from GraphQL response
+    Outputs: Normalized User dict
+    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects
+    Information (per User): Login, CreatedAt, Name, Emails, socialAccounts, Company, Location, Organizations, Bio
     """
     # Normalize socialAccounts URLs to eliminate erroneous duplicates
     social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
@@ -75,10 +75,10 @@ def normalize_user(node: Dict) -> Dict:
 
 def normalize_org(node: Dict) -> Dict:
     """
-    Inputs: Organization or member dict from GraphQL response.
-    Outputs: Normalized organization / member dict with shared key schema.
-    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects.
-    Information (per Organization and member): login, createdAt, name, emails, (socialAccounts or websiteUrl), company (if applicable), location, (description or bio).
+    Inputs: Organization or member dict from GraphQL response
+    Outputs: Normalized organization / member dict with shared key schema
+    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects
+    Information (per Organization and member): Login, CreatedAt, Name, Emails, (socialAccounts or websiteUrl), Company (if applicable), Location, (Description or Bio).
     """
     # Normalize social account URLs
     website_url = node.get("websiteUrl")
@@ -110,10 +110,10 @@ def normalize_org(node: Dict) -> Dict:
 
 def compare_user_relations(following: list, followers: list) -> list:
     """
-    Inputs: Two lists of user dicts: (1) following and (2) followers.
-    Outputs: List of user dicts annotated with their relationship to the target user.
+    Inputs: Two lists of User dicts: (1) following and (2) followers.
+    Outputs: List of User dicts annotated with their relationship to the Target User.
     Method: Membership testing and dictionary merging.
-    Information (per User): Relation to target user ('mutual', 'following', or 'follower').
+    Information (per User): Relation to the Target User ('mutual', 'following', or 'follower').
     """
     following_dict = {user['login']: user for user in following if user.get('login')}
     followers_dict = {user['login']: user for user in followers if user.get('login')}
@@ -142,10 +142,10 @@ def compare_user_relations(following: list, followers: list) -> list:
 
 def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrichment function
     """
-    Inputs: List of user dicts and personal access token
-    Outputs: List of user dicts with head and tail commit history enrichment
+    Inputs: GitHub Personal Access Token and a list of User dicts
+    Outputs: List of User dicts with head and tail commit history enrichment
     Method: GitHub REST API search endpoint
-    Information (per User): Email, Timestomped commits? (bool)
+    Information (per User): Email, Timestomped Commits? (bool)
     """
     # calculate batch sizes for us in queries
     for user in results:

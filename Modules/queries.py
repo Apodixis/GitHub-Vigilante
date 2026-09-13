@@ -7,9 +7,9 @@ Central location for GraphQL and REST API query strings used in in requests.
 
 def graphQL_user_exact_query(login) -> str:
     """
-    Inputs: Target User login.
-    Outputs: GraphQL User query string.
-    Method: Variable insertion format string.
+    Inputs: Target User login
+    Outputs: GraphQL User query string
+    Method: Variable insertion using a format string
     """
     login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
@@ -53,9 +53,9 @@ def graphQL_user_exact_query(login) -> str:
 
 def graphQL_user_partial_query(login) -> str:
     """
-    Inputs: Target user search string.
-    Outputs: GraphQL user search query string.
-    Method: Variable insertion format string.
+    Inputs: Target user login substring
+    Outputs: GraphQL user search query string
+    Method: Variable insertion using a format string
     """
     search_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
@@ -81,9 +81,9 @@ def graphQL_user_partial_query(login) -> str:
 
 def graphQL_organizations_exact_query(orgLogin: str) -> str:
     """
-    Inputs: Target Organization login.
-    Outputs: GraphQL Organization query string.
-    Method: Variable insertion format string.
+    Inputs: Target Organization login
+    Outputs: GraphQL Organization query string
+    Method: Variable insertion using a format string
     """
     orgLogin_literal = json.dumps(orgLogin) # Ensure orgLogin is properly escaped for GraphQL query
     return f"""
@@ -109,7 +109,7 @@ def graphQL_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) 
     """
     Inputs: One or more User logins and the number of head and tail repositories to fetch per user
     Outputs: GraphQL User query string
-    Method: Variable insertion format string, iterative query development
+    Method: Variable insertion using a format string, iterative query development via concatenation
     """
     query = f"""query FindCommitHeadAndTail {{
         """
@@ -165,9 +165,9 @@ def graphQL_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) 
 
 def graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]]) -> str:
     """
-    Inputs: One or more user tuples containing information needed to fetch commit information
+    Inputs: One or more User tuples containing information needed to fetch commit information
     Outputs: GraphQL User query string
-    Method: Variable insertion format string, iterative query development
+    Method: Variable insertion using a format string, iterative query development via concatenation
     """
     query = f"""query FetchSpecifiedCommits {{
         """
