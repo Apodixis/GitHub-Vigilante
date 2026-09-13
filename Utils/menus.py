@@ -85,7 +85,7 @@ def enrichment_prompt() -> str:
     Output: Returns the user's choice as a string ("1" or "2")
     """
     clear_terminal()
-    print("1) Enrich Results: Will take longer") # Additional calls to enrichment functions and HTTP response delays
+    print("1) Enrich Results: May take significantly longer") # Additional calls to enrichment functions and HTTP response delays
     print("2) Skip Enrichment") # Skips the enrichment step
     
     while True:
