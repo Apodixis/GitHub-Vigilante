@@ -153,7 +153,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     
     repo_count = 3
     nodes_per_repo = 3 
-    user_count = 300//(repo_count*2*nodes_per_repo) # multiplied by two to account for head and tail queries
+    user_count = 500//(repo_count*2*nodes_per_repo) # multiplied by two to account for head and tail queries
     logins = [user["login"] for user in results if user.get("login")]
     
     # creates a lookup dictionary for results by login (case-insensitive)
