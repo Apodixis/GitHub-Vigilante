@@ -222,4 +222,4 @@ def organization_search(
     
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Orgs"
     
-    return org_rows + members, target
+    return org_rows, members, target

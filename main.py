@@ -169,13 +169,22 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     menus.clear_terminal()
     
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
-    org_data, target = search.organization_search(token, targets)
+    org_data, member_data, target = search.organization_search(token, targets)
+    
+    choice = menus.enrichment_prompt()
+    if choice == "1": # enrich current results data, takes significantly longer
+        enriched = "_Enriched" # leading underscore included to match outfile naming convention
+        member_data = transform.user_commit_history(token, member_data)
+    
+    elif choice == "2": # skip enrichment
+        enriched = ""
+        pass
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    return org_data, target, mode # returns target user for inclusion in file naming convention
+    return org_data + member_data, target, mode, enriched # returns target user for inclusion in file naming convention
 
 if __name__ == '__main__':
     is_valid, message = validate_personal_access_token(token)
@@ -193,7 +202,7 @@ if __name__ == '__main__':
         results_data, target, mode = _email_search(token)
     
     elif choice == 3: # Organization Search
-        results_data, target, mode = _organization_search(token)
+        results_data, target, mode, enriched = _organization_search(token)
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")
