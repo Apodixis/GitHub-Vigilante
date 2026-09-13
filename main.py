@@ -1,6 +1,7 @@
 import os, time, requests
 from pathlib import Path
 
+import Modules.state as state # used to store global state variables like authorized_login
 import Utils.menus as menus # used to print option trees and to handle user input collection
 import Modules.search as search # consists of logic for each search method
 import Utils.dataTransformations as transform # used for transforming and enriching GitHub user data
@@ -67,6 +68,8 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
     if r.status_code != 200:
         return False, f"Token validation failed with status code {r.status_code}: {r.text[:200]}"
     
+    state.current_user = r.json().get("login") # fetch authenticated user's login for use in constructing the user-agent string
+    
     return True, "Token is valid."
 
 ## PERSONAL ACCESS TOKEN TEST BLOCK
@@ -90,7 +93,7 @@ def _decision_tree() -> int:
             
             else:
                 return choice_int
-            
+        
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
@@ -121,7 +124,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
                 print(f"At least one user login is required.")
                 continue
             break
-            
+        
         menus.clear_terminal()
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
@@ -145,7 +148,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
 
 def _email_search(token):
     mode = "EmailPseudonymHistory"
-            
+    
     targets = menus.multiple_input_prompt("Email") # email input menu
     menus.clear_terminal()
     
@@ -191,7 +194,7 @@ if __name__ == '__main__':
     if not is_valid:
         print(message)
         menus.quit_program()
-        
+    
     choice = _decision_tree() # Begin program execution
     menus.clear_terminal()
     

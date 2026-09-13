@@ -1,7 +1,8 @@
-import re
-import requests, time
+import requests, time, re
 from collections import deque
 from typing import List, Dict, Tuple, Optional, Any
+
+import Modules.state as state # access global state variables like authorized_login
 import Utils.dataTransformations as transform
 
 """
@@ -9,6 +10,7 @@ Central location for sending HTTP requests and handling response contents
 """
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+user_agent = {"user-agent": f"GitHub-Vigilante (user: {state.authorized_login})"}
 
 # Variable declarations for rate limit safeguards
 max_requests_per_minute = 20 # conservative request limit to avoid GitHub's unpredictable secondary rate limits
@@ -50,10 +52,7 @@ def graphQL_raw_request(token: str, query: str) -> Dict[str, Any]:
     Outputs: Raw GraphQL data for the requested fields
     Method: GraphQL API request with transient-failure retries
     """
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"} | user_agent
     
     for attempt in range(3):
         try:
@@ -95,7 +94,7 @@ def graphql_user_exact_request(
     Method: GitHub GraphQL API with pagination
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"} | user_agent
     
     if followership is None:
         followership = {}
@@ -195,7 +194,7 @@ def graphql_user_exact_request(
             # handles data in incompatible data structs from earlier design and merges it into a dict
             existing_user["relationships"] = {login: ",".join(sorted(existing_relationships))}
             existing_user["relationships"].update(related_user["relationships"])
-            
+        
         else:
             existing_user["relationships"] = related_user["relationships"]
     
@@ -221,7 +220,7 @@ def graphql_user_partial_request(
     Method: GitHub GraphQL API with pagination
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"} | user_agent
     cursor: Optional[str] = None
     normalized_users: List[Dict] = []
     page_number = 1
@@ -276,7 +275,7 @@ def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
     Outputs: Decoded JSON response body (Results)
     Method: REST API request with token authorization
     """
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"} | user_agent
     
     # up to three requests (initial + 2 retries) for resiliency
     for attempt in range(3):
@@ -357,7 +356,7 @@ def graphql_organization_exact_request(
     Method: GitHub GraphQL API with pagination
     Information (per Organization/member): Login, createdAt, Name, Email, social accounts, Company, Location, membership, Bio
     """
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"} | user_agent
     
     if members_by_login is None:
         members_by_login = {}

@@ -126,7 +126,7 @@ def compare_user_relations(following: list, followers: list) -> list:
             user = following_dict[login].copy()
             user['_relation'] = 'mutual'
             relations.append(user)
-            
+        
         elif login in following_dict:
             user = following_dict[login].copy()
             user['_relation'] = 'following'
