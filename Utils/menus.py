@@ -27,7 +27,7 @@ def multiple_input_prompt(target_type: str) -> set[str]:
     Output: Set of one or more unique inputs for use in the selected search method
     """
     targets: set[str] = set()
-    print(f"Enter {target_type} login values")
+    print(f"Enter {target_type} values")
     print("Press Enter on an empty line when finished.")
     while True:
         raw_input_value = input(f"{target_type}(s): ").strip()
@@ -45,14 +45,32 @@ def multiple_input_prompt(target_type: str) -> set[str]:
     clear_terminal()
     return targets
 
-def user_search_mode() -> str:
+def search_mode_selection(options: list[str]) -> str:
     """
-    Menu for selecting user search mode when running main.py
+    Menu for selecting search mode when running main.py
+    Inputs: List of options to display in the menus
     Output: Returns the user's choice as a string ("1" or "2")
     """
     clear_terminal()
-    print("1) User Search - Exact Match") # Finds information for a specific user: (User, Followership, and Stargazing)
-    print("2) User Search - Partial Match") #Finds users based on partial matches (will likely return multiple results)
+    # prints each option with its corresponding number
+    for i, option in enumerate(options, start=1):
+        print(f"{i}) {option}")
+    
+    while True:
+        choice = input(f"Enter a number between 1 and {len(options)}: ").strip()
+        if choice in map(str, range(1, len(options) + 1)):
+            return choice
+        else:
+            print(f"Invalid selection. Please enter a number between 1 and {len(options)}.")
+
+def pivot_search_mode() -> str:
+    """
+    Menu for selecting pivot search mode when running main.py
+    Output: Returns the user's choice as a string ("1" or "2")
+    """
+    clear_terminal()
+    print("1) Email Pseudonyms") # Finds all unique Login, Fullname pairs associated with each input email
+    print("2) Fullname Pseudonyms") # Finds all unique Login, Email pairs associated with each input fullname
     
     while True:
         choice = input("Enter 1 or 2: ").strip()

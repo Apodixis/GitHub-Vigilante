@@ -66,7 +66,7 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
 
 #============================================================================================
 
-def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[list[dict], str]:
+def pseudonym_search(token: str, targets: str | Iterable[str], target_type: str) -> tuple[list[dict], str]:
     """
     Inputs: GitHub Personal Access Token and target email addresses
     Outputs: List of pseudonymous User dicts associated with the target emails
@@ -77,7 +77,7 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
     results: list[dict] = []
     seen: set[tuple[str | None, str | None, str | None]] = set()
     
-    for target in target_emails:
+    for target in targets:
         prev_email_length = len(results)
         order = "asc"
         query_descending = False # Used to capture newest commits for users with totalCommits > 1000 (improves volume of considered data)
@@ -96,10 +96,10 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
             while i <= total_pages:
                 per_page = 100 if totalCount is None or totalCount >= 100 else totalCount
                 params = {
-                    "q": f"author-email:{target}",
+                    "q": f"committer-{target_type}:{target}",
                     "per_page": per_page,
                     "page": i,
-                    "sort": "author-date",
+                    "sort": "committer-date",
                     "order": order
                 }
                 
@@ -121,9 +121,10 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
                     break
                 
                 for item in commits:
-                    login = (item.get("author") or {}).get("login")
-                    name = (item.get("commit", {}).get("author") or {}).get("name")
-                    email = (item.get("commit", {}).get("author") or {}).get("email")
+                    login = (item.get("committer") or {}).get("login")
+                    committer = (item.get("commit") or {}).get("committer") or {}
+                    name = committer.get("name")
+                    email = committer.get("email")
                     
                     # normalize email to lowercase for consistent comparison
                     email = email.casefold() if isinstance(email, str) else email
@@ -166,9 +167,9 @@ def email_pseudonyms(token: str, target_emails: str | Iterable[str]) -> tuple[li
             
             break
     
-    target = next(iter(target_emails)) if len(target_emails) == 1 else f"{len(target_emails)}-Emails"
+    target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-{target_type}"
     
-    print(f"\n{len(target_emails)} emails processed: {len(results)} unique pseudonym combinations harvested.")
+    print(f"\n{len(targets)} {target_type} processed: {len(results)} unique pseudonym combinations harvested.")
     
     return results, target
 

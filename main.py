@@ -79,8 +79,8 @@ def _decision_tree() -> int:
     menus.clear_terminal()
     
     print("1) User Search")
-    print("2) Email Search")
-    print("3) Organization Search")
+    print("2) Organization Search")
+    print("3) Pivot Engine")
     print("4) PLACEHOLDER") # Development placeholder for additional, unknown functions
     
     while True:
@@ -103,13 +103,17 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     1. Exact: Returns info on the input User(s) and their followership and stargazing relationships
     2. Partial: Returns info on all Users returned by the partial search query. User info includes followership and stargazing relationships. (This may return a large number of users, depending on the search term.)
     '''
-    search_mode = menus.user_search_mode() # User Search Mode Selection
+    search_mode_options = [
+        "User Search - Exact Match",
+        "User Search - Partial Match"
+        ]
+    search_mode = menus.search_mode_selection(search_mode_options) # User Search Mode Selection
     menus.clear_terminal()
     
     if search_mode == "1": # User Search Exact
         mode = "UserSearchExact"
         
-        targets = menus.multiple_input_prompt("User") # user input menu
+        targets = menus.multiple_input_prompt("User login") # user input menu
         menus.clear_terminal()
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
@@ -119,9 +123,9 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         mode = "UserSearchPartial"
         
         while True:
-            target_substring = input("Enter the user login to analyze: ").strip()
+            target_substring = input("Enter the user login substring to analyze: ").strip()
             if not target_substring:
-                print(f"At least one user login is required.")
+                print(f"Enter a user login substring.")
                 continue
             break
         
@@ -145,21 +149,6 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     
     #print(user_data)
     return user_data, target, mode, enriched
-
-def _email_search(token):
-    mode = "EmailPseudonymHistory"
-    
-    targets = menus.multiple_input_prompt("Email") # email input menu
-    menus.clear_terminal()
-    
-    start_time = time.perf_counter() # Start time measurement (Benchmarking)
-    user_data, target = search.email_pseudonyms(token, targets)
-    
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-    print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
-    
-    return user_data, target, mode # returns target user for inclusion in file naming convention
 
 def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
@@ -189,6 +178,47 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     
     return org_data + member_data, target, mode, enriched # returns target user for inclusion in file naming convention
 
+def _pivot_engine(token):
+    '''
+    Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
+    1. Email Pseudonyms: Returns all unique Login, Fullname pairs associated with each input email
+    2. Fullname Pseudonyms: Returns all unique Login, Email pairs associated with each input fullname (This may return a large number of users, depending on the search term.)
+    '''
+    search_mode_options = [
+        "Pseudonym Search - Emails",
+        "Pseudonym Search - Fullnames"
+        ]
+    search_mode = menus.search_mode_selection(search_mode_options) # Pseudonym Search Mode Selection
+    menus.clear_terminal()
+    
+    mode = "Pivot"
+    
+    if search_mode == "1": # Email Pseudonyms Search
+        mode += "EmailPseudonyms"
+        target_type = "email"
+        
+        targets = menus.multiple_input_prompt("Email") # email input menu
+        menus.clear_terminal()
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        committer_data, target = search.pseudonym_search(token, targets, target_type)
+    
+    elif search_mode == "2": # Fullname Pseudonyms Search
+        mode += "FullnamePseudonyms"
+        target_type = "name"
+        
+        targets = menus.multiple_input_prompt("Fullname") # fullname input menu
+        menus.clear_terminal()
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        committer_data, target = search.pseudonym_search(token, targets, target_type)
+    
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
+    
+    return committer_data, target, mode # returns target user for inclusion in file naming convention
+
 if __name__ == '__main__':
     is_valid, message = validate_personal_access_token(token)
     if not is_valid:
@@ -201,11 +231,11 @@ if __name__ == '__main__':
     if choice == 1: # User Search
         results_data, target, mode, enriched = _user_search(token) # Fetch user data and target username
     
-    elif choice == 2: # Email Search
-        results_data, target, mode = _email_search(token)
-    
-    elif choice == 3: # Organization Search
+    elif choice == 2: # Organization Search
         results_data, target, mode, enriched = _organization_search(token)
+    
+    elif choice == 3: # Pivot Engine
+        results_data, target, mode = _pivot_engine(token)
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")

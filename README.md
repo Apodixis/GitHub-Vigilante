@@ -23,18 +23,20 @@ Retrieves information on the input user, their followers, the users they follow,
 **2) Partial Match**
 Retrieves information on users whose name includes the input substring.
 
-**3) Email *(Commit)* Search**
-<span style="color:#FFA500;">*(Planned, development not yet started)*</span>
-Retrieves information for all commits pushed by a specific email address (or aliased email address) to identify relationships.
-
 ### Organization Search
 
 **1) Full Info**
-<ul>
 Retrieves information on the input organization(s), org members, and org repositories.
-</ul>
 
-### Repository Search
+### Pivots Search
+
+**1) Committer Email Search**
+Retrieves all unique (login, fullname) pairs for all commits pushed by any of the input email addresses (or aliased email addresses).
+
+**1) Committer Fullname Search**
+Retrieves all unique (login, fullname) pairs for all commits pushed by any of the input fullnames. *Fullname searches are tokenized, making them less precise and more likely to include additional noise.*
+
+### Repository Search *(Planned)*
 
 **1) Full Info**
 <span style="color:#FFA500;">*(Planned, development not yet started)*</span>
