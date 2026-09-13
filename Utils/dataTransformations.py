@@ -149,7 +149,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     """
     # calculate batch sizes for us in queries
     for user in results:
-        user["timestompedCommits"] = False
+        user.setdefault("timestompedCommits", False)
     
     repo_count = 3
     nodes_per_repo = 3 
