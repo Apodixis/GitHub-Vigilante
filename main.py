@@ -153,22 +153,18 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         user_data, target = search.user_search_exact(token, logins)
         
         # check if target email addresses are not associated with fetched user dicts; add if missing
-        try:
-            if isinstance(committer_data, dict):
-                for user in user_data:
-                    if not isinstance(user, dict):
-                        continue
-                    
-                    login = user.get("login")
-                    email = committer_data.get(login)
-                    if email is None:
-                        continue
-                    
-                    if email not in user["emails"]:
-                        user["emails"].add(email)
-        
-        except Exception:
-            pass
+        if isinstance(committer_data, dict):
+            for user in user_data:
+                if not isinstance(user, dict):
+                    continue
+                
+                login = user.get("login")
+                email = committer_data.get(login)
+                if email is None:
+                    continue
+                
+                if email not in user["emails"]:
+                    user["emails"].add(email)
         # --
     
     choice = menus.selection_menu(enrichment_options)
