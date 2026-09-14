@@ -64,6 +64,63 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     #print(results)
     return results, login_substring
 
+def email_reverse_search(token: str, targets: str | Iterable[str]) -> tuple[set[str], dict[str, str | None]]:
+    """
+    Inputs: GitHub Personal Access Token and target email addresses
+    Outputs: Dict containing logins (keys) and their corresponding emails (values)
+    Method: GitHub Search API for commits with pagination
+    Information (per User): Login, Email
+    """
+    base_url = "https://api.github.com/search/commits"
+    results: dict[str, str | None] = {}
+    logins: set[str] = set()
+    seen: set[tuple[str | None, str | None]] = set()
+    
+    # handles len(targets) = 1 by converting a single string target into a list to avoid character indexing
+    if isinstance(targets, str):
+        targets = [targets]
+        
+    for i, target in enumerate(targets):
+        
+        params = {
+            "q": f"committer-email:{target}",
+            "per_page": 100,
+            "page": 1,
+            "sort": "committer-date",
+            "order": "desc"
+        }
+        
+        response = client.rest_request(token, base_url, params)
+        
+        commits = response.get("items", [])
+        if not commits:
+            print(f"{i + 1} of {len(targets)} emails processed") # progress update message
+            continue
+        
+        for item in commits:
+            login = (item.get("committer") or {}).get("login")
+            email = ((item.get("commit") or {}).get("committer") or {}).get("email")
+            
+            # normalize email to lowercase for consistent comparison
+            email = email.casefold() if isinstance(email, str) else email
+            
+            pair = (login, email)
+            if pair in seen:
+                continue
+            
+            else:
+                seen.add(pair)
+            
+            if login is not None or email is not None:
+                results[f"{login}"] = email
+                logins.add(login)
+        
+        # progress update message
+        if login:
+            print(f"\nLogin identified for {target}: {i + 1} of {len(targets)} emails processed")
+    
+    return logins, results
+
 #============================================================================================
 
 def pseudonym_search(token: str, targets: str | Iterable[str], target_type: str) -> tuple[list[dict], str]:

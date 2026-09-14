@@ -105,7 +105,8 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     '''
     search_mode_options = [
         "User Search - Exact Match",
-        "User Search - Partial Match"
+        "User Search - Partial Match",
+        "User Search - Email Reverse Search"
         ]
     search_mode = menus.search_mode_selection(search_mode_options) # User Search Mode Selection
     menus.clear_terminal()
@@ -133,6 +134,36 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         user_data, target = search.user_search_partial(token, target_substring)
+    
+    elif search_mode == "3": # User Search Email
+        mode = "UserSearchEmail"
+        
+        targets = menus.multiple_input_prompt("Email") # email input menu
+        menus.clear_terminal()
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        logins, committer_data = search.email_reverse_search(token, targets)
+        
+        user_data, target = search.user_search_exact(token, logins)
+        
+        # check if target email addresses are not associated with fetched user dicts; add if missing
+        try:
+            if isinstance(committer_data, dict):
+                for user in user_data:
+                    if not isinstance(user, dict):
+                        continue
+                    
+                    login = user.get("login")
+                    email = committer_data.get(login)
+                    if email is None:
+                        continue
+                    
+                    if email not in user["emails"]:
+                        user["emails"].add(email)
+        
+        except Exception:
+            pass
+        # --
     
     choice = menus.enrichment_prompt()
     if choice == "1": # enrich current results data, takes significantly longer
