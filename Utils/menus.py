@@ -45,11 +45,11 @@ def multiple_input_prompt(target_type: str) -> set[str]:
     clear_terminal()
     return targets
 
-def search_mode_selection(options: list[str]) -> str:
+def selection_menu(options: list[str]) -> str:
     """
-    Menu for selecting search mode when running main.py
+    Menu for selecting an option from a provided list when running main.py
     Inputs: List of options to display in the menus
-    Output: Returns the user's choice as a string ("1" or "2")
+    Output: Returns the user's choice as a string ("1", "2", ..., "n") corresponding to the selected option
     """
     clear_terminal()
     # prints each option with its corresponding number
@@ -62,35 +62,3 @@ def search_mode_selection(options: list[str]) -> str:
             return choice
         else:
             print(f"Invalid selection. Please enter a number between 1 and {len(options)}.")
-
-def pivot_search_mode() -> str:
-    """
-    Menu for selecting pivot search mode when running main.py
-    Output: Returns the user's choice as a string ("1" or "2")
-    """
-    clear_terminal()
-    print("1) Email Pseudonyms") # Finds all unique Login, Fullname pairs associated with each input email
-    print("2) Fullname Pseudonyms") # Finds all unique Login, Email pairs associated with each input fullname
-    
-    while True:
-        choice = input("Enter 1 or 2: ").strip()
-        if choice == "1" or choice == "2":
-            return choice
-        else:
-            print("Invalid selection. Please enter 1 or 2.")
-
-def enrichment_prompt() -> str:
-    """
-    Menu for selecting if the user would like to enrich the current results data
-    Output: Returns the user's choice as a string ("1" or "2")
-    """
-    clear_terminal()
-    print("1) Enrich Results: May take significantly longer") # Additional calls to enrichment functions and HTTP response delays
-    print("2) Skip Enrichment") # Skips the enrichment step
-    
-    while True:
-        choice = input("Enter 1 or 2: ").strip()
-        if choice == "1" or choice == "2":
-            return choice
-        else:
-            print("Invalid selection. Please enter 1 or 2.")
