@@ -176,6 +176,9 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         enriched = ""
         pass
     
+    # score results
+    user_data = transform.scoring_battery(user_data)
+    
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)

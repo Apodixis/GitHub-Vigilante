@@ -5,11 +5,10 @@ __________________________________________________________________
 
 ## Todos
 
-1) Modify functions to handle multiple inputs
-2) Build remaining functions
+1) Mature Scoring Implementation (Scoring Battery)
+2) Implement GraphDB or Link Analysis function
 3) Extract reusable code to ./Utils
-4) Configure initial scoring implementation (Config file, scoring functions, and sample indicators)
-5) Refine thresholds and formulas used as scoring criterion
+4) Refine thresholds and formulas used as scoring criterion
 
 __________________________________________________________________
 

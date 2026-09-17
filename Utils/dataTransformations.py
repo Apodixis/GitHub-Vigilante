@@ -1,7 +1,9 @@
 from urllib.parse import urlsplit, urlunsplit
 from typing import Dict
+
 import Modules.client as client
 import Modules.queries as queries
+import config
 
 ignore_email_substrings = ["noreply", "github-actions", "[bot]"]
 
@@ -71,6 +73,7 @@ def normalize_user(node: Dict) -> Dict:
         "organizations": organizations,
         "org_count": len(organizations),
         "bio": node.get("bio"),
+        "score": 0,
     }
 
 def normalize_org(node: Dict) -> Dict:
@@ -253,5 +256,60 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                     or (authored_date and committed_date and committed_date < authored_date)
                 ):
                     result_user["timestompedCommits"] = True
+    
+    return results
+
+def scoring_battery(results: list[dict]) -> list[dict]:
+    """
+    Inputs: List of User dicts
+    Outputs: List of User dicts with score (likelihood of being clustered with the activity set selectors in .config) added
+    Method: Inclusion testing against blacklisted and suspicious indicators
+    Information (per User): Score
+    """
+    # retrieve scoring weights and blacklists from config.py
+    bad_match, suspicious_match = config.bad_match, config.suspicious_match_weight
+    relationship_scores = config.relationship_scores
+    bad_logins, bad_emails, suspicious_substrings = config.BAD_LOGINS, config.BAD_EMAILS, config.SUSPICIOUS_SUBSTRINGS
+    bad_degree_weight = config.bad_degree_weight
+    
+    # check user values and score based on matches and corresponding weights
+    for i, user in enumerate(results):
+        score, login_match, email_match = 0, False, False # initialize variables needed for scoring
+        login = user.get("login", "").casefold()
+        emails = [email.casefold() for email in user.get("emails", set())]
+        print(f"Scoring user {i + 1} of {len(results)}: {login}")
+        
+        # hard-stop immediately for known malicious login/email matches
+        if login in bad_logins or any(email in bad_emails for email in emails):
+            print(f"User {login} matched blacklisted login or email")
+            user["score"] = bad_match # user almost certainly malicious (assuming blacklists are accurate)
+            continue
+        
+        # check if any suspicious substrings in login or email
+        login_match = any(substring in login for substring in suspicious_substrings)
+        email_match = any(
+            any(substring in email for substring in suspicious_substrings)
+            for email in emails
+        )
+        # maximum match score = suspicious_match_weight * 2
+        if login_match:
+            score += suspicious_match
+        if email_match:
+            score += suspicious_match
+        
+        # check if user is directly related to any blacklisted accounts
+        relationships = user.get("relationships") or {}
+        bad_degree = 0
+        if relationships:
+            for k, v in relationships.items():
+                if k.casefold() in bad_logins:
+                    bad_degree += 1
+                    print(f"User {login} relationship to blacklisted account {k}: {v}")
+                    score += relationship_scores[v]
+            
+            user["score"] += bad_degree * bad_degree_weight
+        
+        # assign the final score to the user dictionary
+        user["score"] = score
     
     return results
