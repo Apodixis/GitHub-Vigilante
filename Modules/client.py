@@ -166,7 +166,7 @@ def graphql_user_exact_request(
         if not (more_following or more_followers):
             break
     
-    # Store per-target relationship type as {target_login: relation_type} and merge by related login.
+    # Store each user's relationship types as {other_login: relation_type}, keyed by the related login on each side.
     relation_rows = transform.compare_user_relations(following, followers)
     for related_user in relation_rows:
         related_login = related_user.get("login")
@@ -176,35 +176,16 @@ def graphql_user_exact_request(
         incoming_relationship = related_user.pop("_relation", None)
         related_user["relationships"] = {login: incoming_relationship} if incoming_relationship else {}
         
+        # mirror the relationship onto the target's own relationships dict (target's followership, not just related_user's)
+        if incoming_relationship and normalized_target is not None:
+            normalized_target["relationships"][related_login] = incoming_relationship
+        
         existing_user = followership.get(related_login)
         if existing_user is None:
             followership[related_login] = related_user
             continue
         
-        existing_relationships = existing_user.get("relationships")
-        
-        if isinstance(existing_relationships, dict):
-            existing_relationships.update(related_user["relationships"])
-            
-        elif isinstance(existing_relationships, str):
-            existing_user["relationships"] = {login: existing_relationships, **related_user["relationships"]}
-            
-        elif isinstance(existing_relationships, set):
-            
-            # handles data in incompatible data structs from earlier design and merges it into a dict
-            existing_user["relationships"] = {login: ",".join(sorted(existing_relationships))}
-            existing_user["relationships"].update(related_user["relationships"])
-        
-        else:
-            existing_user["relationships"] = related_user["relationships"]
-    
-    target_relationships = normalized_target.get("relationships") if normalized_target else None
-    if isinstance(target_relationships, dict) and normalized_target is not None:
-        normalized_target["total_relationships"] = len(target_relationships)
-    
-    for related_user in followership.values():
-        relationships = related_user.get("relationships")
-        related_user["total_relationships"] = len(relationships) if isinstance(relationships, dict) else 0
+        existing_user["relationships"].update(related_user["relationships"])
     
     return normalized_target, followership
 
@@ -212,7 +193,7 @@ def graphql_user_partial_request(
     token: str,
     query: str,
     page_size: int = 100,
-    social_size: int = 10,
+    social_size: int = 100,
 ) -> List[Dict]:
     """
     Inputs: GitHub Personal Access Token, GitHub user login substring, and GraphQL query variables

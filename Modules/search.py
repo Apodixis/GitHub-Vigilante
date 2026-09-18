@@ -43,13 +43,13 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
         if login.casefold() not in target_logins
     ]
     
-    # alphabetizes key order for the 'relationships' dict for each followership record (followers and following)
-    for user in followership_rows:
+    # alphabetizes key order for the 'relationships' dict for each target and followership record (followers and following)
+    for user in target_rows + followership_rows:
         relationship_value = user.get("relationships")
         if isinstance(relationship_value, dict):
             user["relationships"] = {
-                target_login: relationship_value[target_login]
-                for target_login in sorted(relationship_value)
+                related_login: relationship_value[related_login]
+                for related_login in sorted(relationship_value)
             }
     
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Users"

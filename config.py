@@ -1,7 +1,7 @@
 # Used in score calculation for identifying malicious and likely malicious accounts for triage
 
 # SCORE WEIGHTING VARIABLES
-bad_match = 1000
+bad_match = 100
 suspicious_match_weight = 20
 
 bad_following_weight = 5
@@ -17,7 +17,7 @@ relationship_scores = {
 
 # personalized PageRank ("guilt-by-association") settings for relationship graph scoring
 graph_pagerank_alpha = 0.85 # standard / default damping factor for PageRank
-graph_pagerank_weight = bad_match  # ties the 0-1 PageRank score to the same ceiling as a direct blacklist match
+graph_pagerank_weight = bad_match ** 2  # ties the 0-1 PageRank score to the same ceiling as a direct blacklist match
 # --
 
 # insert known bad logins here (will flag matched user records as 100% malicious)

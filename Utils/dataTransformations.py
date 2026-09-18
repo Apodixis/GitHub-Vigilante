@@ -340,10 +340,10 @@ def scoring_battery(results: list[dict]) -> list[dict]:
         # guilt-by-association score: proximity to blacklisted accounts across the n-hop relationship graph
         graph_score = graph_scores.get(login, 0)
         if graph_score:
-            print(f"User {login} guilt-by-association PageRank score: {graph_score:.6f}")
+            # print(f"User {login} guilt-by-association PageRank score: {graph_score:.6f}")
             score += graph_score * graph_score_weight
         
         # assign the final score to the user dictionary
-        user["score"] = score
+        user["score"] = min(score, bad_match)
     
     return results
