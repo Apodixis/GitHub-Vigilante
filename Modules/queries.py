@@ -5,7 +5,7 @@ Central location for GraphQL and REST API query strings used in in requests.
 # Query for GitHub user information, including followership and social accounts
 ## DESIGN_NOTE: Potential Optimization - Omit Organization Info for follower/following in the initial user query, then build a batched user org query from the merged followership set.
 
-def graphQL_user_exact_query(login) -> str:
+def graphql_user_exact_query(login) -> str:
     """
     Inputs: Target User login
     Outputs: GraphQL User query string
@@ -51,7 +51,7 @@ def graphQL_user_exact_query(login) -> str:
     }}
 """
 
-def graphQL_user_partial_query(login) -> str:
+def graphql_user_partial_query(login) -> str:
     """
     Inputs: Target user login substring
     Outputs: GraphQL user search query string
@@ -79,7 +79,7 @@ def graphQL_user_partial_query(login) -> str:
 
 #============================================================================================
 
-def graphQL_organizations_exact_query(orgLogin: str) -> str:
+def graphql_organizations_exact_query(orgLogin: str) -> str:
     """
     Inputs: Target Organization login
     Outputs: GraphQL Organization query string
@@ -105,7 +105,7 @@ def graphQL_organizations_exact_query(orgLogin: str) -> str:
 
 #============================================================================================
 
-def graphQL_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) -> str:
+def graphql_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) -> str:
     """
     Inputs: One or more User logins and the number of head and tail repositories to fetch per user
     Outputs: GraphQL User query string
@@ -163,7 +163,7 @@ def graphQL_commit_enrichment_query_1(batch_logins: list[str], repo_count: int) 
     query += f"}}"
     return query
 
-def graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]]) -> str:
+def graphql_commit_enrichment_query_2(repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]]) -> str:
     """
     Inputs: One or more User tuples containing information needed to fetch commit information
     Outputs: GraphQL User query string

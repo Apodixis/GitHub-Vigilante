@@ -173,7 +173,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     for i in range(0,len(logins), user_count):
         batch_logins = logins[i:i+user_count]
         
-        initial_query = queries.graphQL_commit_enrichment_query_1(batch_logins, repo_count)
+        initial_query = queries.graphql_commit_enrichment_query_1(batch_logins, repo_count)
         initial_results = client.graphql_request(token, initial_query)
         if initial_results.get("errors"):
             raise RuntimeError(f"GraphQL error: {initial_results['errors']}")
@@ -214,7 +214,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
             continue
         # --
         
-        committer_query = queries.graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user)
+        committer_query = queries.graphql_commit_enrichment_query_2(repo_commit_pairs_by_user)
         committer_results = client.graphql_request(token, committer_query)
         if committer_results.get("errors"):
             raise RuntimeError(f"GraphQL error: {committer_results['errors']}")

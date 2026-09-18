@@ -167,7 +167,12 @@ def _user_search(token) -> tuple[list[dict], str, str]:
                     user["emails"].add(email)
         # --
     
+    # pause the timer while waiting on user input, then resume by shifting start_time forward
+    prompt_start = time.perf_counter()
     choice = menus.selection_menu(enrichment_options)
+    start_time += time.perf_counter() - prompt_start
+    # --
+    
     if choice == "1": # enrich current results data, takes significantly longer
         enriched = "_Enriched" # leading underscore included to match outfile naming convention
         user_data = transform.user_commit_history(token, user_data)
@@ -199,7 +204,10 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     start_time = time.perf_counter() # Start time measurement (Benchmarking)
     org_data, member_data, target = search.organization_search(token, targets)
     
+    # pause the timer while waiting on user input, then resume by shifting start_time forward
+    prompt_start = time.perf_counter()
     choice = menus.selection_menu(enrichment_options)
+    start_time += time.perf_counter() - prompt_start
     if choice == "1": # enrich current results data, takes significantly longer
         enriched = "_Enriched" # leading underscore included to match outfile naming convention
         member_data = transform.user_commit_history(token, member_data)

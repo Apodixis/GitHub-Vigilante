@@ -1,7 +1,5 @@
-import os, openpyxl
-import re
+import os, re, openpyxl
 from openpyxl.utils import get_column_letter
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from datetime import datetime
 
 def _sanitize_excel_value(value):
