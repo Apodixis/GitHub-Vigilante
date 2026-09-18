@@ -14,6 +14,10 @@ relationship_scores = {
     "follower": bad_follower_weight,
     "mutual": bad_mutual_weight
 }
+
+# personalized PageRank ("guilt-by-association") settings for relationship graph scoring
+graph_pagerank_alpha = 0.85 # standard / default damping factor for PageRank
+graph_pagerank_weight = bad_match  # ties the 0-1 PageRank score to the same ceiling as a direct blacklist match
 # --
 
 # insert known bad logins here (will flag matched user records as 100% malicious)

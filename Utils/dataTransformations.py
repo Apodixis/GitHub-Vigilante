@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit, urlunsplit
 from typing import Dict
+import networkx as nx
 
 import Modules.client as client
 import Modules.queries as queries
@@ -259,18 +260,57 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     
     return results
 
+def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
+    """
+    Inputs: List of User dicts (targets and related users)
+    Outputs: Directed graph connecting every login to the logins found in its 'relationships' dict
+    Method: Adds a weighted edge (by relation type strength) for every user -> related_login pair
+    """
+    relationship_scores = config.relationship_scores
+    graph = nx.DiGraph()
+    
+    for user in results:
+        login = (user.get("login") or "").casefold()
+        if not login:
+            continue
+        graph.add_node(login)
+        
+        relationships = user.get("relationships") or {}
+        for related_login, relation in relationships.items():
+            weight = relationship_scores.get(relation, 1)
+            graph.add_edge(login, related_login.casefold(), weight=weight)
+    
+    return graph
+
+def guilt_by_association_scores(graph: nx.DiGraph, bad_logins: set) -> dict:
+    """
+    Inputs: Relationship graph and set of blacklisted logins
+    Outputs: Dict of login -> personalized PageRank score (proximity to blacklisted accounts across n-hop paths)
+    Method: Personalized PageRank seeded on whichever blacklisted logins are present as nodes in the graph
+    """
+    seed_nodes = [login for login in bad_logins if login in graph]
+    if not seed_nodes: # no blacklisted accounts reachable in this graph, nothing to propagate
+        return {}
+    
+    personalization = {login: 1 for login in seed_nodes}
+    return nx.pagerank(graph, alpha=config.graph_pagerank_alpha, personalization=personalization, weight="weight")
+
 def scoring_battery(results: list[dict]) -> list[dict]:
     """
     Inputs: List of User dicts
     Outputs: List of User dicts with score (likelihood of being clustered with the activity set selectors in .config) added
-    Method: Inclusion testing against blacklisted and suspicious indicators
+    Method: Inclusion testing against blacklisted and suspicious indicators and link analysis.. 
     Information (per User): Score
     """
     # retrieve scoring weights and blacklists from config.py
     bad_match, suspicious_match = config.bad_match, config.suspicious_match_weight
-    relationship_scores = config.relationship_scores
-    bad_logins, bad_emails, suspicious_substrings = config.BAD_LOGINS, config.BAD_EMAILS, config.SUSPICIOUS_SUBSTRINGS
-    bad_degree_weight = config.bad_degree_weight
+    bad_logins = {login.casefold() for login in config.BAD_LOGINS}
+    bad_emails, suspicious_substrings = config.BAD_EMAILS, config.SUSPICIOUS_SUBSTRINGS
+    graph_score_weight = config.graph_pagerank_weight
+    
+    # build the full relationship graph once and compute guilt-by-association scores for every reachable login
+    graph = build_relationship_graph(results)
+    graph_scores = guilt_by_association_scores(graph, bad_logins)
     
     # check user values and score based on matches and corresponding weights
     for i, user in enumerate(results):
@@ -291,23 +331,17 @@ def scoring_battery(results: list[dict]) -> list[dict]:
             any(substring in email for substring in suspicious_substrings)
             for email in emails
         )
-        # maximum match score = suspicious_match_weight * 2
+        
         if login_match:
             score += suspicious_match
         if email_match:
             score += suspicious_match
         
-        # check if user is directly related to any blacklisted accounts
-        relationships = user.get("relationships") or {}
-        bad_degree = 0
-        if relationships:
-            for k, v in relationships.items():
-                if k.casefold() in bad_logins:
-                    bad_degree += 1
-                    print(f"User {login} relationship to blacklisted account {k}: {v}")
-                    score += relationship_scores[v]
-            
-            user["score"] += bad_degree * bad_degree_weight
+        # guilt-by-association score: proximity to blacklisted accounts across the n-hop relationship graph
+        graph_score = graph_scores.get(login, 0)
+        if graph_score:
+            print(f"User {login} guilt-by-association PageRank score: {graph_score:.6f}")
+            score += graph_score * graph_score_weight
         
         # assign the final score to the user dictionary
         user["score"] = score

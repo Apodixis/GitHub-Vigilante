@@ -12,7 +12,7 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
     if isinstance(login, str):
         logins = [login]
     else:
-        logins = sorted({value for value in login if value})
+        logins = sorted({value.casefold(): value for value in login if value}.values()) # dedupe case-insensitively, keep last-seen casing
     
     target_rows: list[dict] = []
     followership_by_login: dict[str, dict] = {}
@@ -36,7 +36,12 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
         target_rows.append(target_user) # Append completed iteration target user to the list of target user dicts
         print(f"{user_login} processed. Followership records fetched: {len(followership_by_login)}")
     
-    followership_rows = list(followership_by_login.values())
+    # drop followership records that duplicate a target user (can happen when targets follow/are followed by each other)
+    target_logins = {user_login.casefold() for user_login in logins}
+    followership_rows = [
+        user for login, user in followership_by_login.items()
+        if login.casefold() not in target_logins
+    ]
     
     # alphabetizes key order for the 'relationships' dict for each followership record (followers and following)
     for user in followership_rows:
