@@ -74,7 +74,7 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
     if r.status_code != 200:
         return False, f"Token validation failed with status code {r.status_code}: {r.text[:200]}"
     
-    state.current_user = r.json().get("login") # fetch authenticated user's login for use in constructing the user-agent string
+    state.authorized_login = r.json().get("login") # fetch authenticated user's login for use in constructing the user-agent string
     
     return True, "Token is valid."
 

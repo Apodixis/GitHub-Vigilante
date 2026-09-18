@@ -1,5 +1,6 @@
 from typing import Iterable
 import Modules.client as client
+import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
 
 def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
@@ -23,7 +24,7 @@ def user_search_exact(token: str, login: str | Iterable[str]) -> tuple[list[dict
         
         # error handling for input users with invalid logins (no corresponding account exists)
         try:
-            target_user, followership_by_login = client.graphql_user_exact_request(
+            target_user, followership_by_login = graphql_fetchers.fetch_user_exact(
                 token,
                 query,
                 user_login,
@@ -64,7 +65,7 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     query = queries.graphQL_user_partial_query(login_substring) # Construct the GraphQL query string for current target user
-    results = client.graphql_user_partial_request(token, query)
+    results = graphql_fetchers.fetch_user_partial(token, query)
     
     #print(results)
     return results, login_substring
@@ -262,7 +263,7 @@ def organization_search(
         
         # error handling for input organizations with invalid logins (no corresponding account exists)
         try:
-            target_org, members_by_login = client.graphql_organization_exact_request(
+            target_org, members_by_login = graphql_fetchers.fetch_organization_exact(
                 token,
                 query,
                 org_login,

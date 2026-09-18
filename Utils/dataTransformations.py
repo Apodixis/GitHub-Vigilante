@@ -174,7 +174,10 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
         batch_logins = logins[i:i+user_count]
         
         initial_query = queries.graphQL_commit_enrichment_query_1(batch_logins, repo_count)
-        initial_results = client.graphQL_raw_request(token, initial_query)
+        initial_results = client.graphql_request(token, initial_query)
+        if initial_results.get("errors"):
+            raise RuntimeError(f"GraphQL error: {initial_results['errors']}")
+        initial_results = initial_results.get("data", {})
         
         repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]] = []
         
@@ -212,7 +215,10 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
         # --
         
         committer_query = queries.graphQL_commit_enrichment_query_2(repo_commit_pairs_by_user)
-        committer_results = client.graphQL_raw_request(token, committer_query)
+        committer_results = client.graphql_request(token, committer_query)
+        if committer_results.get("errors"):
+            raise RuntimeError(f"GraphQL error: {committer_results['errors']}")
+        committer_results = committer_results.get("data", {})
         
         # enumerates owners and accesses their repository data
         for i, (owner, repositories) in enumerate(repo_commit_pairs_by_user):
@@ -305,7 +311,8 @@ def scoring_battery(results: list[dict]) -> list[dict]:
     # retrieve scoring weights and blacklists from config.py
     bad_match, suspicious_match = config.bad_match, config.suspicious_match_weight
     bad_logins = {login.casefold() for login in config.BAD_LOGINS}
-    bad_emails, suspicious_substrings = config.BAD_EMAILS, config.SUSPICIOUS_SUBSTRINGS
+    bad_emails = {email.casefold() for email in config.BAD_EMAILS}
+    suspicious_substrings = config.SUSPICIOUS_SUBSTRINGS
     graph_score_weight = config.graph_pagerank_weight
     
     # build the full relationship graph once and compute guilt-by-association scores for every reachable login
