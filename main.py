@@ -216,11 +216,14 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
         enriched = ""
         pass
     
+    # score results
+    results = transform.scoring_battery(org_data + member_data)
+    
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    return org_data + member_data, target, mode, enriched # returns target user for inclusion in file naming convention
+    return results, target, mode, enriched # returns target user for inclusion in file naming convention
 
 def _pivot_engine(token):
     '''
