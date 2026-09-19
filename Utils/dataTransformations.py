@@ -74,7 +74,9 @@ def normalize_user(node: Dict) -> Dict:
         "organizations": organizations,
         "org_count": len(organizations),
         "bio": node.get("bio"),
+        "relationships": {},
         "score": 0,
+        "timestompedCommits": False
     }
 
 def normalize_org(node: Dict) -> Dict:
@@ -152,9 +154,6 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     Information (per User): Email, Timestomped Commits? (bool)
     """
     # calculate batch sizes for us in queries
-    for user in results:
-        user.setdefault("timestompedCommits", False)
-    
     api_points_per_request = 400
     repo_count = 3
     nodes_per_repo = 3 
