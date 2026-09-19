@@ -2,6 +2,8 @@ import os, re, openpyxl
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 
+import Modules.state as state # access global state variables
+
 def _sanitize_excel_value(value):
 	"""
 	Input: value (str)
@@ -13,21 +15,21 @@ def _sanitize_excel_value(value):
 		return ILLEGAL_CHARACTERS_RE.sub("", value)
 	return value
 
-def write_to_excel(user_data, target, search_mode, enriched) -> str:
+def write_to_excel(results_data) -> str:
 	"""
-	Inputs: user_data (search results), Target(s), search mode, and enriched (bool)
-	Outputs: Excel file using the following file naming convention: f"{YYYYMMDDHHMM}{search_mode}_{target}{enriched}.xlsx"
+	Inputs: results_data (search results)
+	Outputs: Excel file using the following file naming convention: f"{YYYYMMDDHHMM}{search_method}_{target}{enriched}.xlsx"
 	Method: Write search results (without optional enrichment) to an Excel file
 	"""
 	# Create workbook and worksheet
 	wb = openpyxl.Workbook()
 	ws = wb.active
-	ws.title = search_mode
+	ws.title = state.outfile_title
     
 	# Preserve column order: start with keys from first user, append any new keys found in other users
-	if user_data:
-		all_keys = list(user_data[0].keys())
-		for user in user_data[1:]:
+	if results_data:
+		all_keys = list(results_data[0].keys())
+		for user in results_data[1:]:
 			for k in user.keys():
 				if k not in all_keys:
 					all_keys.append(k)
@@ -39,7 +41,7 @@ def write_to_excel(user_data, target, search_mode, enriched) -> str:
 		ws.cell(row=1, column=col, value=key)
     
 	# Write user data
-	for row, user in enumerate(user_data, 2):
+	for row, user in enumerate(results_data, 2):
 		for col, key in enumerate(all_keys, 1):
 			val = user.get(key, "")
 			
@@ -59,7 +61,7 @@ def write_to_excel(user_data, target, search_mode, enriched) -> str:
     
 	# Build filename and path to Downloads
 	date_str = datetime.now().strftime("%Y%m%d%H%M")
-	filename = f"{date_str}{search_mode}_{target}{enriched}.xlsx"
+	filename = f"{date_str}{state.outfile_title}.xlsx"
 	downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
 	file_path = os.path.join(downloads_folder, filename)
     

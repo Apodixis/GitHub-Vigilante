@@ -2,7 +2,7 @@ import requests, time, re
 from collections import deque
 from typing import Dict, Optional, Any
 
-import Modules.state as state # access global state variables like authorized_login
+import Modules.state as state # access global state variables
 
 """
 Central location for sending HTTP requests and handling response contents
