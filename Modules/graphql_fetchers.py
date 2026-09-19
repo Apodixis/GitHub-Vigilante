@@ -77,13 +77,13 @@ def fetch_user_exact(
         
         # Normalize target_user and perform some data transformations
         if normalized_target is None:
-            normalized_target = transform.normalize_user(user)
+            normalized_target = transform.normalize_record(user)
             normalized_target["relationships"] = {}
         
         # Following
         following_conn = user["following"]
         following_nodes_raw = following_conn.get("nodes") or []
-        following_nodes = [transform.normalize_user(n) for n in following_nodes_raw]
+        following_nodes = [transform.normalize_record(n) for n in following_nodes_raw]
         remaining_following = max_following - len(following)
         if remaining_following > 0:
             following.extend(following_nodes[:remaining_following])
@@ -93,7 +93,7 @@ def fetch_user_exact(
         # Followers
         followers_conn = user["followers"]
         followers_nodes_raw = followers_conn.get("nodes") or []
-        followers_nodes = [transform.normalize_user(n) for n in followers_nodes_raw]
+        followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw]
         remaining_followers = max_followers - len(followers)
         if remaining_followers > 0:
             followers.extend(followers_nodes[:remaining_followers])
@@ -159,7 +159,7 @@ def fetch_user_partial(
         raw_users = search.get("nodes") or []
         
         normalized_users.extend(
-            transform.normalize_user(user)
+            transform.normalize_record(user)
             for user in raw_users
             if user
         )
@@ -221,7 +221,7 @@ def fetch_organization_exact(
         # Members
         members_conn = org["membersWithRole"]
         members_nodes_raw = members_conn.get("nodes") or []
-        members_nodes = [transform.normalize_org(n) for n in members_nodes_raw]
+        members_nodes = [transform.normalize_record(n) for n in members_nodes_raw]
         for member in members_nodes:
             member_login = member.get("login")
             if not member_login:
@@ -259,7 +259,7 @@ def fetch_organization_exact(
     if org is None:
         raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
     
-    normalized_target = transform.normalize_org(org)
+    normalized_target = transform.normalize_record(org)
     normalized_target["membership"] = "N/A"
     normalized_target["membership_count"] = "N/A"
     

@@ -31,15 +31,18 @@ def normalize_url(raw: str) -> str:
     
     return urlunsplit((scheme, netloc, parts.path, parts.query, parts.fragment))
 
-def normalize_user(node: Dict) -> Dict:
+def normalize_record(node: Dict) -> Dict:
     """
-    Inputs: User dict from GraphQL response
-    Outputs: Normalized User dict
-    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects
-    Information (per User): Login, CreatedAt, Name, Emails, socialAccounts, Company, Location, Organizations, Bio
+    Inputs: User or Organization record (dict) from GraphQL response
+    Outputs: Normalized record
+    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce object dimensionality
+    Information (per Profile): Login, CreatedAt, Name, Emails, socialAccounts, Company, Location, Organizations, Bio
     """
     # Normalize socialAccounts URLs to eliminate erroneous duplicates
+    website_url = node.get("websiteUrl")
     social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
+    if website_url:
+        social_nodes = [{"url": website_url}] + social_nodes
     social_accounts = {
         normalize_url(n.get("url"))
         for n in social_nodes
@@ -63,55 +66,29 @@ def normalize_user(node: Dict) -> Dict:
         emails.add(email_val.casefold())
     
     return {
+        # unique identifier and suspiciousness score (triage order)
         "login": node.get("login"),
-        "createdAt": node.get("createdAt"),
-        "updatedAt": node.get("updatedAt"),
-        "name": node.get("name"),
+        "score": 0,
+        
+        # pivot attributes
         "emails": emails,
         "socialAccounts": social_accounts,
-        "company": node.get("company"),
-        "location": node.get("location"),
+        "name": node.get("name"),
+        
+        # Relationship/network evidence
+        "relationships": {},
         "organizations": organizations,
         "org_count": len(organizations),
-        "bio": node.get("bio"),
-        "relationships": {},
-        "score": 0,
-        "timestompedCommits": False
-    }
-
-def normalize_org(node: Dict) -> Dict:
-    """
-    Inputs: Organization or member dict from GraphQL response
-    Outputs: Normalized organization / member dict with shared key schema
-    Method: Normalizing URLs to eliminate erroneous duplicates in later steps and flattening dicts to reduce dimensionality of objects
-    Information (per Organization and member): Login, CreatedAt, Name, Emails, (socialAccounts or websiteUrl), Company (if applicable), Location, (Description or Bio).
-    """
-    # Normalize social account URLs
-    website_url = node.get("websiteUrl")
-    social_nodes = (node.get("socialAccounts") or {}).get("nodes") or []
-    if website_url:
-        social_nodes = social_nodes + [{"url": website_url}]
-    social_accounts = {
-        normalize_url(n.get("url"))
-        for n in social_nodes
-        if n and n.get("url")
-    }
-    social_accounts.discard("")
-    
-    # Normalize org email(s) to set for consistency with user normalization
-    email_val = node.get("email")
-    emails = {email_val.casefold()} if email_val else set()
-    
-    return {
-        "login": node.get("login"),
-        "createdAt": node.get("createdAt"),
-        "updatedAt": node.get("updatedAt"),
-        "name": node.get("name"),
-        "emails": emails,
-        "socialAccounts": social_accounts if social_accounts else [],
+        
+        # Additional profile information
         "company": node.get("company"),
         "location": node.get("location"),
-        "bio": node.get("description") if node.get("description") else node.get("bio"),
+        "bio": node.get("description") or node.get("bio"),
+        
+        # Timestamps and insights for temporal analysis
+        "createdAt": node.get("createdAt"),
+        "updatedAt": node.get("updatedAt"),
+        "timestompedCommits": False
     }
 
 def compare_user_relations(following: list, followers: list) -> list:
