@@ -3,7 +3,7 @@ import Modules.client as client
 import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
 
-def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 1, _visited: set[str] | None = None) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
+def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 1, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
     Inputs: GitHub Personal Access Token, one or more GitHub User logins, and an optional followership expansion depth
     Outputs: List of target User profile dicts with followership relationships added
@@ -27,6 +27,7 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
         _visited.add(user_login.casefold())
+        previous_count = len(followership_by_login) # used in progress reporting to calculate new followership records fetched
         query = queries.graphql_user_exact_query(user_login) # Construct the GraphQL query string for current target user
         
         # error handling for input users with invalid logins (no corresponding account exists)
@@ -42,7 +43,8 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
             continue
         
         target_rows.append(target_user) # Append completed iteration target user to the list of target user dicts
-        print(f"{user_login} processed. Followership records fetched: {len(followership_by_login)}")
+        new_count = len(followership_by_login) - previous_count
+        print(f"Depth {_depth}: {user_login} processed. {new_count} followership records fetched. Total records: {len(followership_by_login)}")
     
     # recurse into the newly discovered followership, treating them as the next depth's targets
     if recursions > 0 and followership_by_login:
@@ -52,7 +54,7 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
         }
         
         if next_logins:
-            nested_rows, _ = user_search_exact(token, next_logins, recursions - 1, _visited)
+            nested_rows, _ = user_search_exact(token, next_logins, recursions - 1, _visited, _depth + 1)
             
             for nested_user in nested_rows:
                 nested_login = nested_user.get("login")
