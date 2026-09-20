@@ -73,9 +73,30 @@ def graphql_request(token: str, query: str, variables: Optional[Dict] = None) ->
             print(f"GraphQL request failed after 3 attempts: {error}")
             raise
         
+        if response.status_code in (502, 503, 504):
+            if attempt == 2:
+                print(f"GitHub GraphQL endpoint returned {response.status_code} after 3 attempts.")
+                response.raise_for_status()
+            
+            delay = request_delay * (attempt + 1) # brief backoff for transient gateway/service errors
+            print(f"GitHub GraphQL endpoint returned {response.status_code} (transient). Retrying in {delay:.1f} seconds.")
+            time.sleep(delay)
+            continue
+        
         if response.status_code not in (403, 429):
             response.raise_for_status()
-            return response.json()
+            
+            try:
+                return response.json()
+            except requests.exceptions.JSONDecodeError as error:
+                if attempt == 2:
+                    print(f"GraphQL response body could not be decoded after 3 attempts: {error}")
+                    raise
+                
+                delay = request_delay * (attempt + 1) # brief backoff for a malformed/empty response body
+                print(f"GraphQL response body was empty or malformed. Retrying in {delay:.1f} seconds.")
+                time.sleep(delay)
+                continue
         
         reset_value = response.headers.get("X-RateLimit-Reset")
         retry_after = response.headers.get("Retry-After")
