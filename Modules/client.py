@@ -14,7 +14,7 @@ def _user_agent() -> Dict[str, str]:
     # built per-request (not at import time) so it reflects state.authorized_login once it's set after token validation
     return {"user-agent": f"GitHub-Vigilante (user: {state.authorized_login})"}
 
-# Variable declarations for rate limit safeguards
+# variable declarations for rate limit safeguards
 max_requests_per_minute = 20 # conservative request limit to avoid GitHub's unpredictable secondary rate limits
 rate_limit_window = 60.0
 request_delay = rate_limit_window / max_requests_per_minute

@@ -6,6 +6,12 @@ import Utils.dataTransformations as transform
 """
 Paginates GraphQL connections and normalizes/merges the resulting records; sits between search.py (search orchestration) and client.py (HTTP transport)
 """
+# variable declarations for pagination and fetch limits
+page_size: int = 100
+max_following: int = 500
+max_followers: int = 500
+max_members: int = 1000
+social_size: int = 4
 
 def _fetch_page(
     token: str,
@@ -41,11 +47,7 @@ def fetch_user_exact(
     token: str,
     query: str,
     login: str,
-    followership: Optional[Dict[str, Dict]] = None,
-    max_following: int = 250,
-    max_followers: int = 250,
-    page_size: int = 100,
-    social_size: int = 100,
+    followership: Optional[Dict[str, Dict]] = None
 ) -> Tuple[Dict, Dict[str, Dict]]:
     """
     Inputs: GitHub Personal Access Token, GraphQL query, GitHub username (login), and pagination limits
@@ -66,10 +68,8 @@ def fetch_user_exact(
     
     while (more_following or more_followers) and (len(following) < max_following or len(followers) < max_followers):
         variables = {
-            "page_size": min(page_size, 100),
-            "social_size": min(social_size, 100),
             "following_cursor": following_cursor,
-            "followers_cursor": followers_cursor,
+            "followers_cursor": followers_cursor
         }
         
         payload = _fetch_page(token, query, variables, not_found_path=["user"], not_found_target=login)
@@ -133,12 +133,7 @@ def fetch_user_exact(
     
     return normalized_target, followership
 
-def fetch_user_partial(
-    token: str,
-    query: str,
-    page_size: int = 100,
-    social_size: int = 100,
-) -> List[Dict]:
+def fetch_user_partial(token: str, query: str) -> List[Dict]:
     """
     Inputs: GitHub Personal Access Token, GraphQL query, and pagination limits
     Outputs: List of normalized user dicts matching the login substring
@@ -150,11 +145,7 @@ def fetch_user_partial(
     page_number = 1
     
     while True:
-        variables = {
-            "page_size": min(page_size, 100),
-            "social_size": min(social_size, 10),
-            "cursor": cursor
-        }
+        variables = { "cursor": cursor }
         
         data = _fetch_page(token, query, variables)
         
@@ -190,9 +181,7 @@ def fetch_organization_exact(
     token: str,
     query: str,
     login: str,
-    members_by_login: Optional[Dict[str, Dict]] = None,
-    max_members: int = 1000,
-    page_size: int = 100,
+    members_by_login: Optional[Dict[str, Dict]] = None
 ) -> Tuple[List[Dict], Dict[str, Dict]]:
     """
     Inputs: GitHub Personal Access Token, GraphQL query, GitHub organization login, and pagination limits
@@ -210,10 +199,7 @@ def fetch_organization_exact(
     new_members = 0
     
     while more_members:
-        variables = {
-            "page_size": min(page_size, 100),
-            "members_cursor": members_cursor,
-        }
+        variables = { "members_cursor": members_cursor }
         
         payload = _fetch_page(token, query, variables, not_found_path=["organization"], not_found_target=login)
         org = payload.get("organization")
