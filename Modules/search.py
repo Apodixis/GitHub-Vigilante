@@ -3,11 +3,11 @@ import Modules.client as client
 import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
 
-def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 1, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
+def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 0, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
     Inputs: GitHub Personal Access Token, one or more GitHub User logins, and an optional followership expansion depth
     Outputs: List of target User profile dicts with followership relationships added
-    Method: GitHub GraphQL API with pagination. Recursion used to fetch follower relationship data
+    Method: GitHub GraphQL API with pagination. Recursion can be used to fetch follower relationship data
     Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     if isinstance(login, str):

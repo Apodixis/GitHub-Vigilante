@@ -62,3 +62,21 @@ def selection_menu(options: list[str]) -> str:
             return choice
         else:
             print(f"Invalid selection. Please enter a number between 1 and {len(options)}.")
+
+def recursion_menu(minimum: int = 0, maximum: int = 3) -> str:
+    """
+    Menu for specifying how many recursions to perform (depth) in the search
+    Inputs: None
+    Output: Returns the user's choice as a string ("0", "1", ..., "n") corresponding to the selected recursion depth
+    """
+    clear_terminal()
+    
+    while True:
+        raw_input_value = input(f"Specify desired depth (number of layers of information). Enter a number between {minimum} and {maximum}: ").strip()
+        try:
+            input_value = float(raw_input_value)
+            depth = int(-(-input_value // 1)) # handles float value inputs by rounding up to the nearest integer
+            return max(minimum, min(depth, maximum)) # clamps value to (minimum, maximum) range
+        
+        except ValueError:
+            print(f"Invalid selection. Please enter a number between {minimum} and {maximum}.")

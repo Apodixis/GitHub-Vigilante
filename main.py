@@ -124,7 +124,8 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         menus.clear_terminal()
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
-        user_data, target = search.user_search_exact(token, targets)
+        depth = menus.recursion_menu() # prompt user for desired recursion depth
+        user_data, target = search.user_search_exact(token, targets, depth) # specify recursion depth explicitly
     
     elif search_mode == "2": # User Search Partial
         while True:

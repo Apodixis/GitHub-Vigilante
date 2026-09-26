@@ -27,7 +27,13 @@ def _fetch_page(
             for error in payload["errors"]
         ):
             raise ValueError(f"Target '{not_found_target}' not found or no data returned from GitHub API.")
-        raise RuntimeError(f"GraphQL error: {payload['errors']}")
+        
+        fatal_errors = [error for error in payload["errors"] if error.get("type") != "RESOURCE_LIMITS_EXCEEDED"]
+        if fatal_errors:
+            raise RuntimeError(f"GraphQL error: {fatal_errors}")
+        
+        # GitHub nulled out individual over-budget fields rather than failing the whole request; carry on with partial data
+        print(f"GitHub GraphQL resource limits exceeded for {len(payload['errors'])} field(s); continuing with partial data.")
     
     return payload.get("data", {})
 
@@ -83,7 +89,7 @@ def fetch_user_exact(
         # Following
         following_conn = user["following"]
         following_nodes_raw = following_conn.get("nodes") or []
-        following_nodes = [transform.normalize_record(n) for n in following_nodes_raw]
+        following_nodes = [transform.normalize_record(n) for n in following_nodes_raw if n]
         remaining_following = max_following - len(following)
         if remaining_following > 0:
             following.extend(following_nodes[:remaining_following])
@@ -93,7 +99,7 @@ def fetch_user_exact(
         # Followers
         followers_conn = user["followers"]
         followers_nodes_raw = followers_conn.get("nodes") or []
-        followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw]
+        followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw if n]
         remaining_followers = max_followers - len(followers)
         if remaining_followers > 0:
             followers.extend(followers_nodes[:remaining_followers])
