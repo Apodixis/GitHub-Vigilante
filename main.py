@@ -228,32 +228,13 @@ def _pivot_engine(token):
     1. Email Pseudonyms: Returns all unique Login, Fullname pairs associated with each input email
     2. Fullname Pseudonyms: Returns all unique Login, Email pairs associated with each input fullname (This may return a large number of users, depending on the search term.)
     '''
-    search_mode_options = [
-        "Pseudonym Search - Emails",
-        "Pseudonym Search - Fullnames"
-        ]
-    search_mode = menus.selection_menu(search_mode_options) # Pseudonym Search Mode Selection
-    menus.clear_terminal()
-    
     search_method = "Pseudonyms"
     
-    if search_mode == "1": # Email Pseudonyms Search
-        target_type = "email"
-        
-        targets = menus.multiple_input_prompt("Email") # email input menu
-        menus.clear_terminal()
-        
-        start_time = time.perf_counter() # Start time measurement (Benchmarking)
-        committer_data, target = search.pseudonym_search(token, targets, target_type)
+    targets = menus.multiple_input_prompt("fullname and/or email") # email input menu
+    menus.clear_terminal()
     
-    elif search_mode == "2": # Fullname Pseudonyms Search
-        target_type = "name"
-        
-        targets = menus.multiple_input_prompt("Fullname") # fullname input menu
-        menus.clear_terminal()
-        
-        start_time = time.perf_counter() # Start time measurement (Benchmarking)
-        committer_data, target = search.pseudonym_search(token, targets, target_type)
+    start_time = time.perf_counter() # Start time measurement (Benchmarking)
+    committer_data, target = search.pseudonym_search(token, targets, target_type="")
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time

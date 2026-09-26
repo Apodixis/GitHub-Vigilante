@@ -174,6 +174,12 @@ def pseudonym_search(token: str, targets: str | Iterable[str], target_type: str)
     seen: set[tuple[str | None, str | None, str | None]] = set()
     
     for target in targets:
+        # handling for email addresses and fullnames
+        if "@" in target:
+            target_type = "email"
+        else:
+            target_type = "name"
+            
         prev_email_length = len(results)
         order = "asc"
         query_descending = False # Used to capture newest commits for users with totalCommits > 1000 (improves volume of considered data)
@@ -263,9 +269,9 @@ def pseudonym_search(token: str, targets: str | Iterable[str], target_type: str)
             
             break
     
-    target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-{target_type}"
+    target = next(iter(targets)) if len(targets) == 1 else f"{len(targets)}-selectors"
     
-    print(f"\n{len(targets)} {target_type} processed: {len(results)} unique pseudonym combinations harvested.")
+    print(f"\n{len(targets)} selectors processed: {len(results)} unique pseudonym combinations harvested.")
     
     return results, target
 
