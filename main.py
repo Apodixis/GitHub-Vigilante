@@ -123,11 +123,13 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         targets = menus.multiple_input_prompt("User login") # user input menu
         menus.clear_terminal()
         
+        search_method += "_Exact"
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         depth = menus.recursion_menu() # prompt user for desired recursion depth
         user_data, target = search.user_search_exact(token, targets, depth) # specify recursion depth explicitly
     
     elif search_mode == "2": # User Search Partial
+        search_method += "_Partial"
         while True:
             target_substring = input("Enter the user login substring to analyze: ").strip()
             if not target_substring:
@@ -141,6 +143,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         user_data, target = search.user_search_partial(token, target_substring)
     
     elif search_mode == "3": # User Search Email
+        search_method += "_Email"
         targets = menus.multiple_input_prompt("Email") # email input menu
         menus.clear_terminal()
         
@@ -184,7 +187,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    state.outfile_title = f"{search_method}_{target}{enriched}"
+    state.outfile_title = f"_{search_method}_{target}{enriched}"
     return user_data
 
 def _organization_search(token) -> tuple[list[dict], str, str]:
@@ -219,7 +222,7 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    state.outfile_title = f"{search_method}_{target}{enriched}"
+    state.outfile_title = f"_{search_method}_{target}{enriched}"
     return results # returns target user for inclusion in file naming convention
 
 def _pivot_engine(token):
@@ -240,7 +243,7 @@ def _pivot_engine(token):
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
-    state.outfile_title = f"{search_method}_{target}"
+    state.outfile_title = f"_{search_method}_{target}"
     return committer_data # returns target user for inclusion in file naming convention
 
 if __name__ == '__main__':
