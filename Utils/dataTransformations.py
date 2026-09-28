@@ -329,7 +329,7 @@ def scoring_battery(results: list[dict]) -> list[dict]:
             # print(f"User {login} guilt-by-association PageRank score: {graph_score:.6f}")
             score += graph_score * graph_score_weight
         
-        # assign the final score to the user dictionary
-        user["score"] = min(score, bad_match)
+        # assign the final score to the user dictionary (max of 90% to maintain distinction from blacklisted users)
+        user["score"] = min(score, bad_match * 0.90)
     
     return results
