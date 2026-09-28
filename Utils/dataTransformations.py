@@ -259,6 +259,9 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
         
         relationships = user.get("relationships") or {}
         for related_login, relation in relationships.items():
+            # only account for outbound relationships (following or mutual)
+            if relation not in {"following", "mutual"}:
+                continue
             weight = relationship_scores.get(relation, 1)
             graph.add_edge(login, related_login.casefold(), weight=weight)
     

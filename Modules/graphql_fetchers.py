@@ -106,19 +106,25 @@ def fetch_user_exact(
         followers_cursor = followers_conn["pageInfo"]["endCursor"]
         more_followers = followers_conn["pageInfo"]["hasNextPage"] and len(followers) < max_followers
         
-        # If no more to fetch, break
+        # if no more to fetch, break
         if not (more_following or more_followers):
             break
     
-    # Store each user's relationship types as {other_login: relation_type}, keyed by the related login on each side.
+    # store each user's relationship types as {other_login: relation_type}, keyed by the related login on each side.
     relation_rows = transform.compare_user_relations(following, followers)
     for related_user in relation_rows:
         related_login = related_user.get("login")
         if not related_login:
             continue
         
+        # extract the incoming relationship type from the related user and determine the corresponding relationship for the target user.
         incoming_relationship = related_user.pop("_relation", None)
-        related_user["relationships"] = {login: incoming_relationship} if incoming_relationship else {}
+        related_relationship = {
+            "following": "follower",
+            "follower": "following",
+            "mutual": "mutual",
+        }.get(incoming_relationship)
+        related_user["relationships"] = {login: related_relationship} if related_relationship else {}
         
         # mirror the relationship onto the target's own relationships dict (target's followership, not just related_user's)
         if incoming_relationship and normalized_target is not None:
