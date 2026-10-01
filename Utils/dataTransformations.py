@@ -245,8 +245,8 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
 def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
     """
     Inputs: List of User dicts (targets and related users)
-    Outputs: Directed graph connecting every login to the logins found in its 'relationships' dict
-    Method: Adds a weighted edge (by relation type strength) for every user -> related_login pair
+    Outputs: Directed graph where each edge represents a follow from source to target
+    Method: Converts each user's relationship labels into correctly directed, weighted edges
     """
     relationship_scores = config.relationship_scores
     graph = nx.DiGraph()
@@ -259,26 +259,44 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
         
         relationships = user.get("relationships") or {}
         for related_login, relation in relationships.items():
-            # only account for outbound relationships (following or mutual)
-            if relation not in {"following", "mutual"}:
+            related_login = related_login.casefold()
+            
+            # converts relationships values into correctly directed edges
+            if relation == "following":
+                source, target = login, related_login
+            elif relation == "follower":
+                source, target = related_login, login
+            elif relation == "mutual":
+                weight = relationship_scores.get(relation, 1)
+                graph.add_edge(login, related_login, weight=weight)
+                graph.add_edge(related_login, login, weight=weight)
                 continue
+            # --
+            else:
+                continue
+            
+            # add or update the directed edge with the appropriate weight
             weight = relationship_scores.get(relation, 1)
-            graph.add_edge(login, related_login.casefold(), weight=weight)
+            existing_weight = graph.get_edge_data(source, target, {}).get("weight", 0)
+            if weight > existing_weight:
+                graph.add_edge(source, target, weight=weight)
     
     return graph
 
 def guilt_by_association_scores(graph: nx.DiGraph, bad_logins: set) -> dict:
     """
     Inputs: Relationship graph and set of blacklisted logins
-    Outputs: Dict of login -> personalized PageRank score (proximity to blacklisted accounts across n-hop paths)
-    Method: Personalized PageRank seeded on whichever blacklisted logins are present as nodes in the graph
+    Outputs: Dict of login -> reverse personalized PageRank score (proximity to accounts following blacklisted accounts across n-hop paths)
+    Method: Reverse Personalized PageRank (RPPR) seeded on blacklisted logins present in the reversed relationship graph
     """
     seed_nodes = [login for login in bad_logins if login in graph]
     if not seed_nodes: # no blacklisted accounts reachable in this graph, nothing to propagate
         return {}
     
     personalization = {login: 1 for login in seed_nodes}
-    return nx.pagerank(graph, alpha=config.graph_pagerank_alpha, personalization=personalization, weight="weight")
+    reverse_graph = graph.reverse(copy=False)
+    
+    return nx.pagerank(reverse_graph, alpha=config.graph_pagerank_alpha, personalization=personalization, weight="weight")
 
 def scoring_battery(results: list[dict]) -> list[dict]:
     """
