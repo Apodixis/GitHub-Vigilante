@@ -5,14 +5,15 @@ bad_match = 100
 suspicious_match_weight = 20
 
 # weights applied to upstream nodes based on relationship type
-bad_follow_weight = 10
-bad_mutual_weight = 20
-bad_degree_weight = 10
+bad_follow_weight = 5
+bad_mutual_weight = 10
+bad_starred_weight = 15
 
 relationship_scores = {
     "following": bad_follow_weight,
     "follower": bad_follow_weight,
-    "mutual": bad_mutual_weight
+    "mutual": bad_mutual_weight,
+    "starred": bad_starred_weight
 }
 
 # personalized PageRank ("guilt-by-association") settings for relationship graph scoring

@@ -17,17 +17,24 @@ def graphql_user_exact_query(login) -> str:
     """
     login_literal = json.dumps(login) # Ensure login is properly escaped for GraphQL query
     return f"""
-    query userExactSearch($page_size: Int = {page_size}, $social_size: Int = {social_size}, $following_cursor: String, $followers_cursor: String) {{
+    query userExactSearch($page_size: Int = {page_size}, $social_size: Int = {social_size}, $following_cursor: String, $followers_cursor: String, $starred_cursor: String, $starred_page_size: Int!, $fetch_following: Boolean!, $fetch_followers: Boolean!, $fetch_starred: Boolean!) {{
         user(login: {login_literal}) {{
             login createdAt updatedAt name email company location bio
             socialAccounts(first: $social_size) {{
                 nodes {{ url }}
             }}
+            starredRepositories(first: $starred_page_size, after: $starred_cursor, orderBy: {{ field: STARRED_AT, direction: DESC }}) @include(if: $fetch_starred) {{
+                pageInfo {{ hasNextPage endCursor }}
+                edges {{
+                    starredAt
+                    node {{ nameWithOwner stargazerCount forkCount }}
+                }}
+            }}
             organizations(first: $page_size) {{
                 totalCount
                 nodes {{ login }}
             }}
-            following(first: $page_size, after: $following_cursor) {{
+            following(first: $page_size, after: $following_cursor) @include(if: $fetch_following) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
                     login createdAt updatedAt name email company location bio
@@ -39,7 +46,7 @@ def graphql_user_exact_query(login) -> str:
                     }}
                 }}
             }}
-            followers(first: $page_size, after: $followers_cursor) {{
+            followers(first: $page_size, after: $followers_cursor) @include(if: $fetch_followers) {{
                 pageInfo {{ hasNextPage endCursor }}
                 nodes {{
                     login createdAt updatedAt name email company location bio

@@ -245,7 +245,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
 def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
     """
     Inputs: List of User dicts (targets and related users)
-    Outputs: Directed graph where each edge represents a follow from source to target
+    Outputs: Directed graph where each edge represents an outbound relationship (follow or starred repository) from source to target
     Method: Converts each user's relationship labels into correctly directed, weighted edges
     """
     relationship_scores = config.relationship_scores
@@ -257,29 +257,49 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
             continue
         graph.add_node(login)
         
+        starred_users = user.get("starred_users") or {}
         relationships = user.get("relationships") or {}
         for related_login, relation in relationships.items():
             related_login = related_login.casefold()
             
-            # converts relationships values into correctly directed edges
-            if relation == "following":
-                source, target = login, related_login
-            elif relation == "follower":
-                source, target = related_login, login
-            elif relation == "mutual":
-                weight = relationship_scores.get(relation, 1)
-                graph.add_edge(login, related_login, weight=weight)
-                graph.add_edge(related_login, login, weight=weight)
-                continue
+            # account for starred relationships and degree of interaction
+            starred_degree = starred_users.get(related_login, 0)
+            if starred_degree:
+                starred_weight = relationship_scores.get("starred", 0) * starred_degree
+            else:
+                starred_weight = 0
             # --
+            
+            # converts relationships values into correctly directed edges
+            if "following" in relation:
+                base_weight = relationship_scores.get("following", 1)
+                edge_updates = [(login, related_login, base_weight + starred_weight,)]
+            
+            elif "follower" in relation:
+                base_weight = relationship_scores.get("follower", 1)
+                edge_updates = [(related_login, login, base_weight)]
+                if starred_degree:
+                    # creates an outbound edge if the related user has starred this user's repositories
+                    edge_updates.append((login, related_login, base_weight + starred_weight))
+            
+            elif "mutual" in relation:
+                base_weight = relationship_scores.get("mutual", 1)
+                edge_updates = [
+                    (login, related_login, base_weight + starred_weight), # outbound edge
+                    (related_login, login, base_weight), # inbound edge
+                ]
+            
+            elif relation == "starred":
+                edge_updates = [(login, related_login, starred_weight)]
+            
             else:
                 continue
+            # --
             
-            # add or update the directed edge with the appropriate weight
-            weight = relationship_scores.get(relation, 1)
-            existing_weight = graph.get_edge_data(source, target, {}).get("weight", 0)
-            if weight > existing_weight:
-                graph.add_edge(source, target, weight=weight)
+            for source, target, weight in edge_updates:
+                existing_weight = graph.get_edge_data(source, target, {}).get("weight", 0)
+                if weight > existing_weight:
+                    graph.add_edge(source, target, weight=weight)
     
     return graph
 

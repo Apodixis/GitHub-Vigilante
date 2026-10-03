@@ -10,6 +10,7 @@ Paginates GraphQL connections and normalizes/merges the resulting records; sits 
 page_size: int = 100
 max_following: int = 500
 max_followers: int = 500
+max_starred: int = 500
 max_members: int = 1000
 social_size: int = 4
 
@@ -53,7 +54,7 @@ def fetch_user_exact(
     Inputs: GitHub Personal Access Token, GraphQL query, GitHub username (login), and pagination limits
     Outputs: Target user profile dict, followership dict (keyed by related login)
     Method: Paginates the GraphQL followers/following connections via client.graphql_request(), normalizing and merging results
-    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs
+    Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs, starred repositories
     """
     if followership is None:
         followership = {}
@@ -62,14 +63,30 @@ def fetch_user_exact(
     followers: List[Dict] = []
     following_cursor: Optional[str] = None
     followers_cursor: Optional[str] = None
+    starred_cursor: Optional[str] = None
     more_following = True
     more_followers = True
+    more_starred = True
+    starred_count = 0
+    starred_users: Dict[str, int] = {}
     normalized_target: Optional[Dict] = None
     
-    while (more_following or more_followers) and (len(following) < max_following or len(followers) < max_followers):
+    while (
+        (more_following and len(following) < max_following)
+        or (more_followers and len(followers) < max_followers)
+        or (more_starred and starred_count < max_starred)
+    ):
+        fetch_following = more_following and len(following) < max_following
+        fetch_followers = more_followers and len(followers) < max_followers
+        fetch_starred = more_starred and starred_count < max_starred
         variables = {
             "following_cursor": following_cursor,
-            "followers_cursor": followers_cursor
+            "followers_cursor": followers_cursor,
+            "starred_cursor": starred_cursor,
+            "starred_page_size": max(1, min(page_size, max_starred - starred_count)),
+            "fetch_following": fetch_following,
+            "fetch_followers": fetch_followers,
+            "fetch_starred": fetch_starred,
         }
         
         payload = _fetch_page(token, query, variables, not_found_path=["user"], not_found_target=login)
@@ -86,29 +103,64 @@ def fetch_user_exact(
             normalized_target = transform.normalize_record(user)
             normalized_target["relationships"] = {}
         
+        # Build outbound starred repository relationships and calculate degree of starred interactions per owner (user)
+        if fetch_starred:
+            starred_conn = user.get("starredRepositories") or {}
+            starred_edges = starred_conn.get("edges") or []
+            starred_count += len(starred_edges)
+            for edge in starred_edges:
+                if not edge:
+                    continue
+                repository = edge.get("node") or {}
+                if not repository:
+                    continue
+                
+                # extract owner login from the repository's nameWithOwner field
+                name_with_owner = repository.get("nameWithOwner") or ""
+                owner_login, separator, _ = name_with_owner.partition("/")
+                
+                # Only consider the repository if it has a valid owner and the owner is not the same as the normalized target user
+                if separator and owner_login and owner_login.casefold() != normalized_target["login"].casefold():
+                    owner_login = owner_login.casefold()
+                    starred_users[owner_login] = starred_users.get(owner_login, 0) + 1 # accumulates the degree of the outgoing starred relationship
+            
+            starred_page_info = starred_conn.get("pageInfo") or {}
+            starred_cursor = starred_page_info.get("endCursor")
+            more_starred = (
+                starred_page_info.get("hasNextPage", False)
+                and starred_count < max_starred
+            )
+        
         # Following
-        following_conn = user["following"]
-        following_nodes_raw = following_conn.get("nodes") or []
-        following_nodes = [transform.normalize_record(n) for n in following_nodes_raw if n]
-        remaining_following = max_following - len(following)
-        if remaining_following > 0:
+        if fetch_following:
+            following_conn = user.get("following") or {}
+            following_nodes_raw = following_conn.get("nodes") or []
+            following_nodes = [transform.normalize_record(n) for n in following_nodes_raw if n]
+            remaining_following = max_following - len(following)
             following.extend(following_nodes[:remaining_following])
-        following_cursor = following_conn["pageInfo"]["endCursor"]
-        more_following = following_conn["pageInfo"]["hasNextPage"] and len(following) < max_following
+            following_page_info = following_conn.get("pageInfo") or {}
+            following_cursor = following_page_info.get("endCursor")
+            more_following = (
+                following_page_info.get("hasNextPage", False)
+                and len(following) < max_following
+            )
         
         # Followers
-        followers_conn = user["followers"]
-        followers_nodes_raw = followers_conn.get("nodes") or []
-        followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw if n]
-        remaining_followers = max_followers - len(followers)
-        if remaining_followers > 0:
+        if fetch_followers:
+            followers_conn = user.get("followers") or {}
+            followers_nodes_raw = followers_conn.get("nodes") or []
+            followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw if n]
+            remaining_followers = max_followers - len(followers)
             followers.extend(followers_nodes[:remaining_followers])
-        followers_cursor = followers_conn["pageInfo"]["endCursor"]
-        more_followers = followers_conn["pageInfo"]["hasNextPage"] and len(followers) < max_followers
-        
-        # if no more to fetch, break
-        if not (more_following or more_followers):
-            break
+            followers_page_info = followers_conn.get("pageInfo") or {}
+            followers_cursor = followers_page_info.get("endCursor")
+            more_followers = (
+                followers_page_info.get("hasNextPage", False)
+                and len(followers) < max_followers
+            )
+    
+    if normalized_target is not None:
+        normalized_target["starred_users"] = starred_users
     
     # store each user's relationship types as {other_login: relation_type}, keyed by the related login on each side.
     relation_rows = transform.compare_user_relations(following, followers)
@@ -136,6 +188,26 @@ def fetch_user_exact(
             continue
         
         existing_user["relationships"].update(related_user["relationships"])
+    
+    # adds starred relationships to the target user's relationships dict
+    if normalized_target is not None:
+        target_relationships = normalized_target["relationships"]
+        for starred_login in starred_users:
+            matching_login = next(
+                (
+                    related_login
+                    for related_login in target_relationships
+                    if related_login.casefold() == starred_login
+                ),
+                None
+            )
+            
+            if matching_login is None:
+                target_relationships[starred_login] = "starred"
+                
+            elif "starred" not in target_relationships[matching_login]: # adds starred relationship context to existing relationship records
+                target_relationships[matching_login] += " and starred"
+    # --
     
     return normalized_target, followership
 

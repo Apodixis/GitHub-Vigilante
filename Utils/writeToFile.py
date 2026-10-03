@@ -26,12 +26,15 @@ def write_to_excel(results_data) -> str:
 	ws = wb.active
 	ws.title = state.outfile_title
     
+    # omitted keys to be excluded from the Excel output
+	excluded_keys = {"starred_users"}
+	
 	# Preserve column order: start with keys from first user, append any new keys found in other users
 	if results_data:
-		all_keys = list(results_data[0].keys())
+		all_keys = [key for key in results_data[0] if key not in excluded_keys]
 		for user in results_data[1:]:
 			for k in user.keys():
-				if k not in all_keys:
+				if k not in all_keys and k not in excluded_keys:
 					all_keys.append(k)
 	else:
 		all_keys = []
