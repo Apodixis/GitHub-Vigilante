@@ -42,6 +42,10 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
             print(f"{user_login} skipped: Invalid Login")
             continue
         
+        except Exception as error: # catch-all for any other unexpected errors
+            print(f"{user_login} skipped after repeated GitHub request failure: {error}")
+            continue
+        
         target_rows.append(target_user) # Append completed iteration target user to the list of target user dicts
         new_count = len(followership_by_login) - previous_count
         print(f"Depth {_depth}: {user_login} processed. {new_count} followership records fetched. Total records: {len(followership_by_login)}")

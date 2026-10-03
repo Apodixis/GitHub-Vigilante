@@ -48,6 +48,79 @@ def _wait_for_rest_window() -> None: # helper function
     
     _request_times.append(now)
 
+def _rate_limit_delay(response) -> float:
+    retry_after = response.headers.get("Retry-After")
+    if retry_after:
+        try:
+            return max(float(retry_after), 0)
+        except ValueError:
+            return rate_limit_window
+    
+    reset_value = response.headers.get("X-RateLimit-Reset")
+    if not reset_value:
+        reset_match = re.search(
+            r"Rate limit resets at Unix timestamp:\s*(\d+(?:\.\d+)?)",
+            response.text,
+            flags=re.IGNORECASE,
+        )
+        reset_value = reset_match.group(1) if reset_match else None
+    
+    if reset_value:
+        try:
+            return max((float(reset_value) + request_delay) - time.time(), 0)
+        except ValueError:
+            return rate_limit_window
+    
+    return rate_limit_window
+
+def _is_graphql_rate_limited(payload: Dict[str, Any]) -> bool:
+    return any(
+        (error.get("type") or "").upper() in {"RATE_LIMITED", "RATE_LIMIT_EXCEEDED"}
+        or "rate limit" in (error.get("message") or "").casefold()
+        for error in payload.get("errors", [])
+        if isinstance(error, dict)
+    )
+
+def _request_with_backoff(request_fn, url: str, service_name: str, **kwargs):
+    retry_number = 0
+    transient_statuses = {500, 502, 503, 504}
+    
+    while True:
+        _wait_for_rest_window()
+        try:
+            response = request_fn(url, **kwargs)
+        except requests.exceptions.SSLError:
+            raise
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as error:
+            retry_number += 1
+            delay = min(20.0 * (2 ** min(retry_number - 1, 7)), 120.0)
+            print(f"{service_name} request failed: {error}. Retrying in {delay:.1f} seconds.")
+            time.sleep(delay)
+            continue
+        
+        if response.status_code in (403, 429):
+            delay = _rate_limit_delay(response)
+            print(
+                f"{service_name} endpoint rate-limited with status {response.status_code}. "
+                f"Retrying in {delay:.1f} seconds."
+            )
+            response.close()
+            time.sleep(delay)
+            continue
+        
+        if response.status_code in transient_statuses:
+            retry_number += 1
+            delay = min(20.0 * (1.5 ** min(retry_number - 1, 7)), 120.0)
+            print(
+                f"{service_name} endpoint returned {response.status_code}. "
+                f"Retrying in {delay:.1f} seconds."
+            )
+            response.close()
+            time.sleep(delay)
+            continue
+        
+        return response
+
 def graphql_request(token: str, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Inputs: GitHub Personal Access Token, GraphQL query, and optional query variables
@@ -59,79 +132,49 @@ def graphql_request(token: str, query: str, variables: Optional[Dict] = None) ->
     if variables is not None:
         body["variables"] = variables
     
-    # up to three requests (initial + 2 retries) for resiliency
-    for attempt in range(3):
-        # Apply the shared sliding-window throttle before each request attempt.
-        _wait_for_rest_window()
+    retry_attempt = 0
+    while True:
         try:
-            response = requests.post(GITHUB_GRAPHQL_URL, json=body, headers=headers, timeout=(20, 60))
+            response = _request_with_backoff(
+                requests.post,
+                GITHUB_GRAPHQL_URL,
+                "GraphQL",
+                json=body,
+                headers=headers,
+                timeout=(20, 60),
+            )
         except requests.exceptions.RequestException as error:
-            if attempt < 2:
+            retry_attempt += 1
+            if retry_attempt < 3:
                 print(f"GraphQL request failed: {error}. Retrying.")
                 continue
             
             print(f"GraphQL request failed after 3 attempts: {error}")
             raise
         
-        if response.status_code in (502, 503, 504):
-            if attempt == 2:
-                print(f"GitHub GraphQL endpoint returned {response.status_code} after 3 attempts.")
-                response.raise_for_status()
+        response.raise_for_status()
+        
+        try:
+            payload = response.json()
+        except requests.exceptions.JSONDecodeError as error:
+            retry_attempt += 1
+            if retry_attempt >= 3:
+                print(f"GraphQL response body could not be decoded after 3 attempts: {error}")
+                raise
             
-            delay = request_delay * (attempt + 1) # brief backoff for transient gateway/service errors
-            print(f"GitHub GraphQL endpoint returned {response.status_code} (transient). Retrying in {delay:.1f} seconds.")
+            delay = request_delay * retry_attempt # brief backoff for a malformed/empty response body
+            print(f"GraphQL response body was empty or malformed. Retrying in {delay:.1f} seconds.")
             time.sleep(delay)
             continue
         
-        if response.status_code not in (403, 429):
-            response.raise_for_status()
-            
-            try:
-                return response.json()
-            except requests.exceptions.JSONDecodeError as error:
-                if attempt == 2:
-                    print(f"GraphQL response body could not be decoded after 3 attempts: {error}")
-                    raise
-                
-                delay = request_delay * (attempt + 1) # brief backoff for a malformed/empty response body
-                print(f"GraphQL response body was empty or malformed. Retrying in {delay:.1f} seconds.")
-                time.sleep(delay)
-                continue
+        if _is_graphql_rate_limited(payload):
+            delay = _rate_limit_delay(response)
+            print(f"GraphQL response reported a rate limit. Retrying in {delay:.1f} seconds.")
+            response.close()
+            time.sleep(delay)
+            continue
         
-        reset_value = response.headers.get("X-RateLimit-Reset")
-        retry_after = response.headers.get("Retry-After")
-        
-        if retry_after:
-            try:
-                delay = max(float(retry_after), 0)
-            except ValueError:
-                delay = rate_limit_window
-        else:
-            if not reset_value:
-                reset_match = re.search(
-                    r"Rate limit resets at Unix timestamp:\s*(\d+(?:\.\d+)?)",
-                    response.text,
-                    flags=re.IGNORECASE,
-                )
-                reset_value = reset_match.group(1) if reset_match else None
-            
-            if reset_value:
-                try:
-                    delay = max((float(reset_value) + request_delay) - time.time(), 0) # waits 2 more seconds past the reset time
-                except ValueError:
-                    delay = rate_limit_window
-            else:
-                delay = rate_limit_window
-        
-        if attempt == 2:
-            print(f"GitHub rate-limited the GraphQL request with status {response.status_code}.")
-            print(f"Response: {response.text}")
-            response.raise_for_status()
-        
-        print(f"GitHub rate-limited the GraphQL request. Retrying in {delay:.1f} seconds.")
-        time.sleep(delay)
-    
-    raise RuntimeError("GraphQL request failed after rate-limit retries.")
+        return payload
 
 #============================================================================================
 
@@ -145,10 +188,15 @@ def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
     
     # up to three requests (initial + 2 retries) for resiliency
     for attempt in range(3):
-        # Apply the shared sliding-window throttle before each request attempt.
-        _wait_for_rest_window()
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=(20, 20))
+            response = _request_with_backoff(
+                requests.get,
+                url,
+                "REST",
+                headers=headers,
+                params=params,
+                timeout=(20, 20),
+            )
         except requests.exceptions.RequestException as error:
             if attempt < 2:
                 print(f"Request failed for {url}: {error}. Retrying.")
@@ -167,41 +215,7 @@ def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
                 "items": []
             }
         
-        if response.status_code not in (403, 429):
-            response.raise_for_status()
-            return response.json()
-        
-        reset_value = response.headers.get("X-RateLimit-Reset")
-        retry_after = response.headers.get("Retry-After")
-        
-        if retry_after:
-            try:
-                delay = max(float(retry_after), 0)
-            except ValueError:
-                delay = rate_limit_window
-        else:
-            if not reset_value:
-                reset_match = re.search(
-                    r"Rate limit resets at Unix timestamp:\s*(\d+(?:\.\d+)?)",
-                    response.text,
-                    flags=re.IGNORECASE,
-                )
-                reset_value = reset_match.group(1) if reset_match else None
-            
-            if reset_value:
-                try:
-                    delay = max((float(reset_value) + request_delay) - time.time(), 0) # waits 2 more seconds past the reset time
-                except ValueError:
-                    delay = rate_limit_window
-            else:
-                delay = rate_limit_window
-        
-        if attempt == 2:
-            print(f"GitHub rate-limited the request with status {response.status_code}.")
-            print(f"Response: {response.text}")
-            response.raise_for_status()
-        
-        print(f"GitHub rate-limited the request. Retrying in {delay:.1f} seconds.")
-        time.sleep(delay)
+        response.raise_for_status()
+        return response.json()
     
     raise RuntimeError("REST request failed after rate-limit retries.")
