@@ -3,6 +3,7 @@ import Modules.client as client
 import Modules.database as database
 import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
+import Utils.dataTransformations as transform
 
 def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 0, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
@@ -34,9 +35,66 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
         cached_user = database.get_user_record(user_login)
         if cached_user is not None:
             target_rows.append(cached_user)
+            cached_login = cached_user.get("login") or user_login
+            
+            ## RELATED USER RECORD CREATION AND INVERSE RELATIONSHIP HANDLING
+            # followership map with inverted directional relationships
+            inverse_relationships = {
+                "following": "follower",
+                "follower": "following",
+                "mutual": "mutual",
+            }
+            for related_login, relation in (cached_user.get("relationships") or {}).items():
+                if not isinstance(related_login, str) or not related_login:
+                    continue
+                if not isinstance(relation, str):
+                    continue
+                
+                # assign inverted relationship based on the source relationship
+                source_relationship = relation.split(" and starred", 1)[0].strip()
+                inverse_relationship = inverse_relationships.get(source_relationship)
+                if inverse_relationship is None:
+                    continue
+                
+                matching_login = next(
+                    (
+                        existing_login
+                        for existing_login in followership_by_login
+                        if existing_login.casefold() == related_login.casefold()
+                    ),
+                    None,
+                )
+                if matching_login is None:
+                    matching_login = related_login
+                    
+                    # adds a new followership record for the related user if it doesn't already exist
+                    followership_by_login[matching_login] = transform.normalize_record(
+                        {"login": related_login}
+                    )
+                    
+                related_user = followership_by_login[matching_login]
+                related_relationships = related_user.setdefault("relationships", {})
+                existing_relation = related_relationships.get(cached_login)
+                
+                existing_base = (
+                    existing_relation.split(" and starred", 1)[0].strip()
+                    if isinstance(existing_relation, str)
+                    else None
+                )
+                
+                if existing_base == inverse_relationship or existing_base == "mutual":
+                    merged_relationship = existing_base
+                elif {existing_base, inverse_relationship} == {"following", "follower"}:
+                    merged_relationship = "mutual"
+                else:
+                    merged_relationship = inverse_relationship
+                
+                related_relationships[cached_login] = merged_relationship
+            ## -- RELATED USER RECORD CREATION AND INVERSE RELATIONSHIP HANDLING
+            
             print(f"Depth {_depth}: {user_login} loaded from SQLite cache.")
             continue
-
+        
         query = queries.graphql_user_exact_query(user_login) # Construct the GraphQL query string for current target user
         
         # error handling for input users with invalid logins (no corresponding account exists)
@@ -65,7 +123,6 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
             related_login for related_login in followership_by_login
             if related_login.casefold() not in _visited
         }
-        
         if next_logins:
             nested_rows, _ = user_search_exact(token, next_logins, recursions - 1, _visited, _depth + 1)
             
