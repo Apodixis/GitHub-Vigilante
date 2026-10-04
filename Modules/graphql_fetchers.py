@@ -35,11 +35,16 @@ def _fetch_page(
         ):
             raise ValueError(f"Target '{not_found_target}' not found or no data returned from GitHub API.")
         
-        fatal_errors = [error for error in payload["errors"] if error.get("type") != "RESOURCE_LIMITS_EXCEEDED"]
-        if fatal_errors:
-            raise RuntimeError(f"GraphQL error: {fatal_errors}")
-        
+        resource_limit_errors = [error for error in payload["errors"] if error.get("type") != "RESOURCE_LIMITS_EXCEEDED"]
         # GitHub nulled out individual over-budget fields rather than failing the whole request; carry on with partial data
+        if resource_limit_errors:
+            for i, error in enumerate(resource_limit_errors, start=1):
+                path = error.get("path", "<path unavailable>")
+                message = error.get("message", "<message unavailable>")
+                locations = error.get("locations", "<locations unavailable>")
+                print(f"  Resource-limit error {i}: path={path!r}; locations={locations!r}; message={message}")
+            raise RuntimeError(f"GraphQL error: {resource_limit_errors}")
+        
         print(f"GitHub GraphQL resource limits exceeded for {len(payload['errors'])} field(s); continuing with partial data.")
     
     return payload.get("data", {})
