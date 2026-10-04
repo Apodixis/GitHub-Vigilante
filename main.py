@@ -4,6 +4,7 @@ from pathlib import Path
 import Modules.state as state # used to store global state variables like authorized_login
 import Utils.menus as menus # used to print option trees and to handle user input collection
 import Modules.search as search # consists of logic for each search method
+import Modules.database as database # used to persist user records in SQLite
 import Utils.dataTransformations as transform # used for transforming and enriching GitHub user data
 import Utils.writeToFile as writeToFile # used to write results to file (.xlsx)
 
@@ -257,6 +258,10 @@ if __name__ == '__main__':
     
     if choice == 1: # User Search
         results_data = _user_search(token) # Fetch user data and target username
+        
+        # write user records to sqlite database
+        stored_count = database.store_user_records(results_data)
+        print(f"Stored {stored_count} user records in {database.DATABASE_PATH}")
     
     elif choice == 2: # Organization Search
         results_data = _organization_search(token)
@@ -271,5 +276,5 @@ if __name__ == '__main__':
     if not results_data:
         print("\nNO RESULTS RETURNED")
         menus.quit_program()
-    else:
-        writeToFile.write_to_excel(results_data) # Write results data to an Excel file
+    
+    writeToFile.write_to_excel(results_data) # Write results data to an Excel file

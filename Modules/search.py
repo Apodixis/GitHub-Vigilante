@@ -1,5 +1,6 @@
 from typing import Iterable
 import Modules.client as client
+import Modules.database as database
 import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
 
@@ -28,6 +29,14 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
     for user_login in logins:
         _visited.add(user_login.casefold())
         previous_count = len(followership_by_login) # used in progress reporting to calculate new followership records fetched
+        
+        # checks if a target user login already exists in the local SQLite cache and instead retrieves the existing record (skips fetching from GitHub)
+        cached_user = database.get_user_record(user_login)
+        if cached_user is not None:
+            target_rows.append(cached_user)
+            print(f"Depth {_depth}: {user_login} loaded from SQLite cache.")
+            continue
+
         query = queries.graphql_user_exact_query(user_login) # Construct the GraphQL query string for current target user
         
         # error handling for input users with invalid logins (no corresponding account exists)

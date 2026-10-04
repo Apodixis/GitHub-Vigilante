@@ -1,5 +1,6 @@
 # Local secrets and environment files
 .env
+github_vigilante.sqlite3
 
 # Python bytecode and cache
 __pycache__/
