@@ -6,6 +6,11 @@ __________________________________________________________________
 ## To-dos
 
 1) Refine social network analysis methodology (requires experimentation)
+2) Mature database operations and checks to fix the following:
+    a. Add an 'Exists' key to determine how to treat existing records during pre-fetch database checks (facilitates task b)
+    b. Previously used accounts that no longer exist do not get added to the database—future searches will always attempt to retrieve data for these records when included in targets list (compounds if end-user is rerunning selector lists)
+    c. Add a 'Pulled' key to each record that stores the time the record was last added/updated (facilitates prompted or automated pulls to update stale records)
+    d. Build report functions that perform analytic tasks when invoked (ie: identifying longest strings in common for a count(threshold) number of users—surfaces frequently reused naming conventions)
 2) Extract reusable code to ./Utils and helper functions
 3) Refine thresholds and formulas used as scoring criterion
 4) Refine proportional scoring criterion weights
