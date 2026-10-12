@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -93,19 +94,21 @@ def get_user_record(
     if not path.is_file():
         return None
     
-    connection = sqlite3.connect(path)
-    try:
+    # opens connection to the database, fetches a user record by login, and then closes the connection
+    with closing(sqlite3.connect(path)) as connection:
         connection.row_factory = sqlite3.Row
         row = connection.execute(
             "SELECT * FROM users WHERE login = ?",
             (login.strip(),),
         ).fetchone()
-    finally:
-        connection.close()
     
     if row is None:
         return None
     
+    return _user_record_from_row(row)
+
+def _user_record_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    """Restore a database row to the user-record format used by the application."""
     return {
         "login": row["login"],
         "score": row["score"],
@@ -124,6 +127,21 @@ def get_user_record(
         "timestompedCommits": bool(row["timestompedCommits"]),
     }
 
+def get_all_user_records(database_path: str | Path = DATABASE_PATH) -> list[dict[str, Any]]:
+    """Load all stored user records, restoring their JSON fields."""
+    path = Path(database_path)
+    if not path.is_file():
+        return []
+    
+    # opens connection to the database, fetches all records, and then closes the connection
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute(
+            "SELECT * FROM users ORDER BY login COLLATE NOCASE"
+        ).fetchall()
+    
+    return [_user_record_from_row(row) for row in rows]
+
 def store_user_records(
     records: Iterable[dict[str, Any]],
     database_path: str | Path = DATABASE_PATH,
@@ -132,13 +150,14 @@ def store_user_records(
     values = [
         row
         for record in records
-        if "starred_users" in record
         if record.get("membership") != "N/A"
         if (row := _user_values(record)) is not None
     ]
     
-    with sqlite3.connect(database_path) as connection:
-        connection.execute(_CREATE_USERS_TABLE)
-        connection.executemany(_UPSERT_USER, values)
+    # opens connection to the database, inserts/updates user records, and then closes the connection
+    with closing(sqlite3.connect(database_path)) as connection:
+        with connection:
+            connection.execute(_CREATE_USERS_TABLE)
+            connection.executemany(_UPSERT_USER, values)
     
     return len(values)
