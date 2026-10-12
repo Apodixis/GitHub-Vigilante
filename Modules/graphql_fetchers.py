@@ -53,19 +53,15 @@ def fetch_user_exact(
     token: str,
     query: str,
     login: str,
-    followership: Optional[Dict[str, Dict]] = None
-) -> Tuple[Dict, Dict[str, Dict]]:
+) -> Tuple[Dict, set[str]]:
     """
     Inputs: GitHub Personal Access Token, GraphQL query, GitHub username (login), and pagination limits
-    Outputs: Target user profile dict, followership dict (keyed by related login)
+    Outputs: Target user profile dict and related follower/following logins
     Method: Paginates the GraphQL followers/following connections via client.graphql_request(), normalizing and merging results
     Information (per User): Login, Name, Email, Bio, Location, Company, socialAccounts URLs, starred repositories
     """
-    if followership is None:
-        followership = {}
-    
-    following: List[Dict] = []
-    followers: List[Dict] = []
+    following: set[str] = set()
+    followers: set[str] = set()
     following_cursor: Optional[str] = None
     followers_cursor: Optional[str] = None
     starred_cursor: Optional[str] = None
@@ -98,21 +94,23 @@ def fetch_user_exact(
         user = payload.get("user")
         #print(f"Fetched user payload: {user}")
         
+        # check if the user exists in the payload
         if not user:
             if normalized_target is None:
                 raise ValueError(f"Target user '{login}' not found or no data returned from GitHub API.")
             break
         
-        # Normalize target_user and perform some data transformations
+        # normalize target_user and perform some data transformations
         if normalized_target is None:
             normalized_target = transform.normalize_record(user)
             normalized_target["relationships"] = {}
         
-        # Build outbound starred repository relationships and calculate degree of starred interactions per owner (user)
+        # build outbound starred repository relationships and calculate degree of starred interactions per owner (user)
         if fetch_starred:
             starred_conn = user.get("starredRepositories") or {}
             starred_edges = starred_conn.get("edges") or []
             starred_count += len(starred_edges)
+            
             for edge in starred_edges:
                 if not edge:
                     continue
@@ -124,13 +122,16 @@ def fetch_user_exact(
                 name_with_owner = repository.get("nameWithOwner") or ""
                 owner_login, separator, _ = name_with_owner.partition("/")
                 
-                # Only consider the repository if it has a valid owner and the owner is not the same as the normalized target user
+                # only consider the repository if it has a valid owner and the owner is not the same as the normalized target user
                 if separator and owner_login and owner_login.casefold() != normalized_target["login"].casefold():
                     owner_login = owner_login.casefold()
                     starred_users[owner_login] = starred_users.get(owner_login, 0) + 1 # accumulates the degree of the outgoing starred relationship
             
+            # extract pagination info for starred repositories connection
             starred_page_info = starred_conn.get("pageInfo") or {}
             starred_cursor = starred_page_info.get("endCursor")
+            
+            # set flag indicating if there are more starred repositories to fetch
             more_starred = (
                 starred_page_info.get("hasNextPage", False)
                 and starred_count < max_starred
@@ -140,81 +141,59 @@ def fetch_user_exact(
         if fetch_following:
             following_conn = user.get("following") or {}
             following_nodes_raw = following_conn.get("nodes") or []
-            following_nodes = [transform.normalize_record(n) for n in following_nodes_raw if n]
-            remaining_following = max_following - len(following)
-            following.extend(following_nodes[:remaining_following])
+            
+            # add following logins to the following set
+            for node in following_nodes_raw:
+                related_login = node.get("login") if node else None
+                if related_login and len(following) < max_following:
+                    following.add(related_login)
+            
+            # extract pagination info for following connection
             following_page_info = following_conn.get("pageInfo") or {}
             following_cursor = following_page_info.get("endCursor")
+            
+            # set flag indicating if there are more following users to fetch
             more_following = (
                 following_page_info.get("hasNextPage", False)
                 and len(following) < max_following
             )
+        # -- END OF FOLLOWING SECTION
         
         # Followers
         if fetch_followers:
             followers_conn = user.get("followers") or {}
             followers_nodes_raw = followers_conn.get("nodes") or []
-            followers_nodes = [transform.normalize_record(n) for n in followers_nodes_raw if n]
-            remaining_followers = max_followers - len(followers)
-            followers.extend(followers_nodes[:remaining_followers])
+            
+            # add follower logins to the followers set
+            for node in followers_nodes_raw:
+                related_login = node.get("login") if node else None
+                if related_login and len(followers) < max_followers:
+                    followers.add(related_login)
+            
+            # extract pagination info for followers connection
             followers_page_info = followers_conn.get("pageInfo") or {}
             followers_cursor = followers_page_info.get("endCursor")
+            
+            # set flag indicating if there are more followers to fetch
             more_followers = (
                 followers_page_info.get("hasNextPage", False)
                 and len(followers) < max_followers
             )
+        # -- END OF FOLLOWERS SECTION
     
+    # assign relationship values to the starred_users and relationships keys
     if normalized_target is not None:
         normalized_target["starred_users"] = starred_users
+        normalized_target["relationships"] = transform.compare_user_relations(
+			following,
+			followers,
+			set(starred_users),
+		)
     
-    # store each user's relationship types as {other_login: relation_type}, keyed by the related login on each side.
-    relation_rows = transform.compare_user_relations(following, followers)
-    for related_user in relation_rows:
-        related_login = related_user.get("login")
-        if not related_login:
-            continue
-        
-        # extract the incoming relationship type from the related user and determine the corresponding relationship for the target user.
-        incoming_relationship = related_user.pop("_relation", None)
-        related_relationship = {
-            "following": "follower",
-            "follower": "following",
-            "mutual": "mutual",
-        }.get(incoming_relationship)
-        related_user["relationships"] = {login: related_relationship} if related_relationship else {}
-        
-        # mirror the relationship onto the target's own relationships dict (target's followership, not just related_user's)
-        if incoming_relationship and normalized_target is not None:
-            normalized_target["relationships"][related_login] = incoming_relationship
-        
-        existing_user = followership.get(related_login)
-        if existing_user is None:
-            followership[related_login] = related_user
-            continue
-        
-        existing_user["relationships"].update(related_user["relationships"])
+    # Include follower, following, and starred-owner logins in recursive expansion.
+    followership_logins = following | followers | set(starred_users)
     
-    # adds starred relationships to the target user's relationships dict
-    if normalized_target is not None:
-        target_relationships = normalized_target["relationships"]
-        for starred_login in starred_users:
-            matching_login = next(
-                (
-                    related_login
-                    for related_login in target_relationships
-                    if related_login.casefold() == starred_login
-                ),
-                None
-            )
-            
-            if matching_login is None:
-                target_relationships[starred_login] = "starred"
-                
-            elif "starred" not in target_relationships[matching_login]: # adds starred relationship context to existing relationship records
-                target_relationships[matching_login] += " and starred"
-    # --
-    
-    return normalized_target, followership
+    return normalized_target, followership_logins
 
 def fetch_user_partial(token: str, query: str) -> List[Dict]:
     """

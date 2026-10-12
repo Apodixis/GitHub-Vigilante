@@ -1,6 +1,6 @@
+import math, networkx as nx
 from urllib.parse import urlsplit, urlunsplit
-from typing import Dict
-import networkx as nx
+from typing import Dict, Iterable
 
 import Modules.client as client
 import Modules.queries as queries
@@ -91,35 +91,38 @@ def normalize_record(node: Dict) -> Dict:
         "timestompedCommits": False
     }
 
-def compare_user_relations(following: list, followers: list) -> list:
+def compare_user_relations(following: Iterable[str], followers: Iterable[str], starred: Iterable[str]) -> Dict[str, str]:
     """
-    Inputs: Two lists of User dicts: (1) following and (2) followers.
-    Outputs: List of User dicts annotated with their relationship to the Target User.
+    Inputs: Three lists of user logins: (1) following and (2) follower and (3) logins the target has starred.
+    Outputs: Related-user dict uniquely keyed by login with relationship annotations.
     Method: Membership testing and dictionary merging.
     Information (per User): Relation to the Target User ('mutual', 'following', or 'follower').
     """
-    following_dict = {user['login']: user for user in following if user.get('login')}
-    followers_dict = {user['login']: user for user in followers if user.get('login')}
-    all_logins = set(following_dict.keys()) | set(followers_dict.keys())
-    relations = []
+    following_logins = {login.casefold() for login in following if isinstance(login, str) and login}
+    follower_logins = {login.casefold() for login in followers if isinstance(login, str) and login}
+    starred_logins = {login.casefold() for login in starred if isinstance(login, str) and login}
     
-    # user followership comparisons
+    # creates a set of all unique logins from following, followers, and starred users to compare against each relationship type sets
+    all_logins = following_logins | follower_logins | starred_logins
+    
+    relations = {}
+    
+    # membership testing (relationship comparisons)
     for login in all_logins:
-        if login in following_dict and login in followers_dict:
-            user = following_dict[login].copy()
-            user['_relation'] = 'mutual'
-            relations.append(user)
+        if login in following_logins and login in follower_logins:
+            relationship = "mutual"
+        elif login in following_logins:
+            relationship = "following"
+        elif login in follower_logins:
+            relationship = "follower"
+        else:
+            relationship = "starred"
         
-        elif login in following_dict:
-            user = following_dict[login].copy()
-            user['_relation'] = 'following'
-            relations.append(user)
-            
-        elif login in followers_dict:
-            user = followers_dict[login].copy()
-            user['_relation'] = 'follower'
-            relations.append(user)
-    # --
+        if login in starred_logins and relationship != "starred":
+            relationship += " and starred"
+        
+        # add login:relationship pair to relations dictionary
+        relations[login] = relationship
     
     return relations
 
@@ -235,7 +238,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                 
                 # check for commits with forged commit timestamps
                 if (
-                    (committed_date and committed_date < created_at)
+                    (committed_date and created_at and committed_date < created_at)
                     or (authored_date and committed_date and committed_date < authored_date)
                 ):
                     result_user["timestompedCommits"] = True
@@ -265,7 +268,7 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
             # account for starred relationships and degree of interaction
             starred_degree = starred_users.get(related_login, 0)
             if starred_degree:
-                starred_weight = relationship_scores.get("starred", 0) * starred_degree
+                starred_weight = relationship_scores.get("starred", 0) * math.log1p(starred_degree)
             else:
                 starred_weight = 0
             # --
@@ -273,7 +276,7 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
             # converts relationships values into correctly directed edges
             if "following" in relation:
                 base_weight = relationship_scores.get("following", 1)
-                edge_updates = [(login, related_login, base_weight + starred_weight,)]
+                edge_updates = [(login, related_login, base_weight + starred_weight)]
             
             elif "follower" in relation:
                 base_weight = relationship_scores.get("follower", 1)

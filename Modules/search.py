@@ -20,77 +20,31 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
     if recursions < 0:
         raise ValueError("recursions must be zero or greater.")
     
+    # tracks logins already fetched across recursion depths to avoid wasteful re-fetching
     if _visited is None:
-        _visited = set() # tracks logins already fetched across recursion depths to avoid redundant re-fetching
+        _visited = set()
     
+    # initialize containers used to track target users and followership logins in user logins loop
     target_rows: list[dict] = []
-    followership_by_login: dict[str, dict] = {}
+    all_related_logins: set[str] = set()
     
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
         _visited.add(user_login.casefold())
-        previous_count = len(followership_by_login) # used in progress reporting to calculate new followership records fetched
         
         # checks if a target user login already exists in the local SQLite cache and instead retrieves the existing record (skips fetching from GitHub)
         cached_user = database.get_user_record(user_login)
         if cached_user is not None:
             target_rows.append(cached_user)
-            cached_login = cached_user.get("login") or user_login
             
-            ## RELATED USER RECORD CREATION AND INVERSE RELATIONSHIP HANDLING
-            # followership map with inverted directional relationships
-            inverse_relationships = {
-                "following": "follower",
-                "follower": "following",
-                "mutual": "mutual",
-            }
             for related_login, relation in (cached_user.get("relationships") or {}).items():
-                if not isinstance(related_login, str) or not related_login:
-                    continue
-                if not isinstance(relation, str):
+                if not isinstance(related_login, str) or not isinstance(relation, str):
                     continue
                 
-                # assign inverted relationship based on the source relationship
-                source_relationship = relation.split(" and starred", 1)[0].strip()
-                inverse_relationship = inverse_relationships.get(source_relationship)
-                if inverse_relationship is None:
-                    continue
-                
-                matching_login = next(
-                    (
-                        existing_login
-                        for existing_login in followership_by_login
-                        if existing_login.casefold() == related_login.casefold()
-                    ),
-                    None,
-                )
-                if matching_login is None:
-                    matching_login = related_login
-                    
-                    # adds a new followership record for the related user if it doesn't already exist
-                    followership_by_login[matching_login] = transform.normalize_record(
-                        {"login": related_login}
-                    )
-                    
-                related_user = followership_by_login[matching_login]
-                related_relationships = related_user.setdefault("relationships", {})
-                existing_relation = related_relationships.get(cached_login)
-                
-                existing_base = (
-                    existing_relation.split(" and starred", 1)[0].strip()
-                    if isinstance(existing_relation, str)
-                    else None
-                )
-                
-                if existing_base == inverse_relationship or existing_base == "mutual":
-                    merged_relationship = existing_base
-                elif {existing_base, inverse_relationship} == {"following", "follower"}:
-                    merged_relationship = "mutual"
-                else:
-                    merged_relationship = inverse_relationship
-                
-                related_relationships[cached_login] = merged_relationship
-            ## -- RELATED USER RECORD CREATION AND INVERSE RELATIONSHIP HANDLING
+                # extracts set of related logins for use as targets in recursion (if recursions > 0)
+                relation_type = relation.split(" and starred", 1)[0].strip()
+                if relation_type in {"following", "follower", "mutual", "starred"}:
+                    all_related_logins.add(related_login)
             
             print(f"Depth {_depth}: {user_login} loaded from SQLite cache.")
             continue
@@ -99,11 +53,10 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
         
         # error handling for input users with invalid logins (no corresponding account exists)
         try:
-            target_user, followership_by_login = graphql_fetchers.fetch_user_exact(
+            target_user, related_logins = graphql_fetchers.fetch_user_exact(
                 token,
                 query,
                 user_login,
-                followership_by_login
             )
         except ValueError:
             print(f"{user_login} skipped: Invalid Login")
@@ -113,52 +66,42 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
             print(f"{user_login} skipped after repeated GitHub request failure: {error}")
             continue
         
-        target_rows.append(target_user) # Append completed iteration target user to the list of target user dicts
-        new_count = len(followership_by_login) - previous_count
-        print(f"Depth {_depth}: {user_login} processed. {new_count} followership records fetched. Total records: {len(followership_by_login)}")
+        # adds valid target_user to the list of targets to fetch data for
+        if target_user is not None:
+            target_rows.append(target_user)
+        
+        # updates the set of followership logins with newly discovered related logins from the current target user
+        all_related_logins.update(related_logins)
+        print(f"Depth {_depth}: {user_login} processed. {len(related_logins)} followership logins fetched.")
     
-    # recurse into the newly discovered followership, treating them as the next depth's targets
-    if recursions > 0 and followership_by_login:
+    # recurse into newly discovered follower/following/starred logins, then return only fetched target records
+    if recursions > 0 and all_related_logins:
+        
+        # builds set of logins for use in the next recursion step, excluding already visited logins
         next_logins = {
-            related_login for related_login in followership_by_login
+            related_login for related_login in all_related_logins
             if related_login.casefold() not in _visited
         }
+        
+        # fetches data for the next set of logins via recursive call to user_search_exact
         if next_logins:
+            # drops target value returned by recursive call
             nested_rows, _ = user_search_exact(token, next_logins, recursions - 1, _visited, _depth + 1)
-            
-            for nested_user in nested_rows:
-                nested_login = nested_user.get("login")
-                if not nested_login:
-                    continue
-                
-                # merge the nested fetch back into the followership record already tracking this user (rather than treating it as a new target)
-                existing_user = followership_by_login.get(nested_login)
-                if existing_user is not None:
-                    existing_relationships = existing_user.get("relationships", {})
-                    existing_user.update(nested_user)
-                    existing_user["relationships"] = existing_relationships | nested_user["relationships"]
-                else:
-                    followership_by_login[nested_login] = nested_user
+            target_rows.extend(nested_rows)
     
-    # drop followership records that duplicate a target user (can happen when targets follow/are followed by each other)
-    target_logins = {user_login.casefold() for user_login in logins}
-    followership_rows = [
-        user for login, user in followership_by_login.items()
-        if login.casefold() not in target_logins
-    ]
-    
-    # alphabetizes key order for the 'relationships' dict for each target and followership record (followers and following)
-    for user in target_rows + followership_rows:
-        relationship_value = user.get("relationships")
-        if isinstance(relationship_value, dict):
+    # finalizes the relationships dict for each fetched target user by sorting the related logins
+    for user in target_rows:
+        relationships = user.get("relationships")
+        if isinstance(relationships, dict):
             user["relationships"] = {
-                related_login: relationship_value[related_login]
-                for related_login in sorted(relationship_value)
+                related_login: relationships[related_login]
+                for related_login in sorted(relationships)
             }
     
+    # determines the target label component of the eventual outfile name based on the number of target logins processed
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Users"
     
-    return target_rows + followership_rows, target # Concatenate target user dicts with deduplicated followership list of dicts
+    return target_rows, target
 
 def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], str]:
     """

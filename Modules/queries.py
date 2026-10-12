@@ -36,27 +36,11 @@ def graphql_user_exact_query(login) -> str:
             }}
             following(first: $page_size, after: $following_cursor) @include(if: $fetch_following) {{
                 pageInfo {{ hasNextPage endCursor }}
-                nodes {{
-                    login createdAt updatedAt name email company location bio
-                    socialAccounts(first: $social_size) {{
-                        nodes {{ url }}
-                    }}
-                    organizations(first: $page_size) {{
-                        nodes {{ login }}
-                    }}
-                }}
+                nodes {{ login }}
             }}
             followers(first: $page_size, after: $followers_cursor) @include(if: $fetch_followers) {{
                 pageInfo {{ hasNextPage endCursor }}
-                nodes {{
-                    login createdAt updatedAt name email company location bio
-                    socialAccounts(first: $social_size) {{
-                        nodes {{ url }}
-                    }}
-                    organizations(first: $page_size) {{
-                        nodes {{ login }}
-                    }}
-                }}
+                nodes {{ login }}
             }}
         }}
     }}
