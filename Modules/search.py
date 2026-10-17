@@ -1,9 +1,9 @@
 from typing import Iterable
+
 import Modules.client as client
 import Modules.database as database
 import Modules.graphql_fetchers as graphql_fetchers
 import Modules.queries as queries
-import Utils.dataTransformations as transform
 
 def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 0, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
     """
@@ -72,7 +72,7 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
         
         # updates the set of followership logins with newly discovered related logins from the current target user
         all_related_logins.update(related_logins)
-        print(f"Depth {_depth}: {user_login} processed. {len(related_logins)} followership logins fetched.")
+        print(f"Depth {_depth}: {user_login} processed. {len(related_logins)} related user logins fetched.")
     
     # recurse into newly discovered follower/following/starred logins, then return only fetched target records
     if recursions > 0 and all_related_logins:
@@ -163,8 +163,8 @@ def email_reverse_search(token: str, targets: str | Iterable[str]) -> tuple[set[
             else:
                 seen.add(pair)
             
-            if login is not None or email is not None:
-                results[f"{login}"] = email
+            if isinstance(login, str) and login.strip():
+                results[login] = email
                 logins.add(login)
         
         # progress update message
@@ -183,6 +183,7 @@ def pseudonym_search(token: str, targets: str | Iterable[str], target_type: str)
     Information (per User): Login, Name, Email
     """
     base_url = "https://api.github.com/search/commits"
+    targets = [targets] if isinstance(targets, str) else list(targets)
     results: list[dict] = []
     seen: set[tuple[str | None, str | None, str | None]] = set()
     

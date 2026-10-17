@@ -10,25 +10,37 @@ if str(project_root) not in sys.path:
 
 import Modules.database as database
 import Modules.Procedures.procedures as procedures
+import Utils.dataTransformations as transform
 
 
 def load_user_records(
 	file_path: str | Path,
 	database_path: str | Path = database.DATABASE_PATH,
 ) -> int:
-	"""Import new users from a search-format Excel workbook."""
+	"""Import new users from a database export JSON file."""
 	return procedures.load_user_records(file_path, database_path)
 
-
 def export_all_user_records() -> str:
-	"""Export all database users to Excel."""
+	"""Export all database users to JSON."""
 	return procedures.export_all_user_records()
+
+def normalize_user_records(
+	database_path: str | Path = database.DATABASE_PATH,
+) -> int:
+	"""Rebuild the users table using the exact-search record schema and field order."""
+	return database.normalize_user_table(database_path)
+
+def score_users(database_path: str | Path = database.DATABASE_PATH) -> int:
+	"""Score all stored users and save the updated records to the database."""
+	user_records = database.get_all_user_records(database_path)
+	if not user_records:
+		return 0
+	scored_records = transform.scoring_battery(user_records)
+	return database.store_user_records(scored_records, database_path)
 
 def _run_function_prompt() -> None:
 	"""Prompt for a function name and optional JSON arguments, then invoke it."""
-	
-	# lists all function declared in this module
-	available_functions = {
+	available_functions = { # lists all function declared in this module
 		name: function
 		for name, function in globals().items()
 		if not name.startswith("_")

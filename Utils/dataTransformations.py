@@ -1,6 +1,8 @@
 import math, networkx as nx
+
 from urllib.parse import urlsplit, urlunsplit
 from typing import Dict, Iterable
+from sklearn.metrics import average_precision_score
 
 import Modules.client as client
 import Modules.queries as queries
@@ -31,7 +33,7 @@ def normalize_url(raw: str) -> str:
     
     return urlunsplit((scheme, netloc, parts.path, parts.query, parts.fragment))
 
-def normalize_record(node: Dict) -> Dict:
+def normalize_record(node: Dict, *, is_user: bool = True) -> Dict:
     """
     Inputs: User or Organization record (dict) from GraphQL response
     Outputs: Normalized record
@@ -68,12 +70,14 @@ def normalize_record(node: Dict) -> Dict:
     return {
         # unique identifier and suspiciousness score (triage order)
         "login": node.get("login"),
-        "score": 0,
+        "graph_score": 0,
+        "substring_score": 0,
+        "composite_score": 0,
         
         # pivot attributes
         "emails": emails,
-        "socialAccounts": social_accounts,
         "name": node.get("name"),
+        "socialAccounts": social_accounts,
         
         # Relationship/network evidence
         "relationships": {},
@@ -88,7 +92,11 @@ def normalize_record(node: Dict) -> Dict:
         # Timestamps and insights for temporal analysis
         "createdAt": node.get("createdAt"),
         "updatedAt": node.get("updatedAt"),
-        "timestompedCommits": False
+        "timestompedCommits": False,
+        **({"isFollowBotter": False} if is_user else {}),
+        
+        # intermediary data (included for additional context and debugging purposes)
+        "substring_matches": 0,
     }
 
 def compare_user_relations(following: Iterable[str], followers: Iterable[str], starred: Iterable[str]) -> Dict[str, str]:
@@ -111,10 +119,13 @@ def compare_user_relations(following: Iterable[str], followers: Iterable[str], s
     for login in all_logins:
         if login in following_logins and login in follower_logins:
             relationship = "mutual"
+            
         elif login in following_logins:
             relationship = "following"
+            
         elif login in follower_logins:
             relationship = "follower"
+            
         else:
             relationship = "starred"
         
@@ -193,19 +204,26 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
             continue
         # --
         
+        # perform a second GraphQL query to retrieve commit metadata for each repository-commit pair
         committer_query = queries.graphql_commit_enrichment_query_2(repo_commit_pairs_by_user)
         committer_results = client.graphql_request(token, committer_query)
+        
         if committer_results.get("errors"):
             raise RuntimeError(f"GraphQL error: {committer_results['errors']}")
+        
+        # extract the commit metadata from the GraphQL response
         committer_results = committer_results.get("data", {})
         
         # enumerates owners and accesses their repository data
         for i, (owner, repositories) in enumerate(repo_commit_pairs_by_user):
             result_user = results_by_login.get(owner.casefold())
+            
             if result_user is None:
                 continue
             
+            # retrieves and normalizes the user's email addresses, ensuring they are stored as a set
             emails = result_user.get("emails")
+            
             if not isinstance(emails, set):
                 emails = set(emails or []) if not isinstance(emails, str) else {emails}
                 result_user["emails"] = emails
@@ -220,18 +238,23 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                 
                 committer_user = committer.get("user") or {}
                 committer_login = committer_user.get("login")
+                
+                # skip commits where the committer login does not match the owner login
                 if not committer_login or committer_login.casefold() != owner.casefold():
                     continue
                 
                 # checks to exclude invalid or ignored email addresses
                 email = committer.get("email")
                 normalized_email = email.casefold() if email else ""
+                
+                # adds normalized email to the user's email set if it is valid and not in the ignore list
                 if email and not any(
                     substring in normalized_email
                     for substring in ignore_email_substrings
                 ):
                     emails.add(normalized_email)
                 
+                # retrieves commit timestamps to facilitate timestomped commit detection
                 authored_date = commit.get("authoredDate")
                 committed_date = commit.get("committedDate")
                 created_at = result_user.get("createdAt")
@@ -254,6 +277,7 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
     relationship_scores = config.relationship_scores
     graph = nx.DiGraph()
     
+    # iterate over each user in the results to build a directed graph user relationships
     for user in results:
         login = (user.get("login") or "").casefold()
         if not login:
@@ -279,11 +303,12 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
                 edge_updates = [(login, related_login, base_weight + starred_weight)]
             
             elif "follower" in relation:
-                base_weight = relationship_scores.get("follower", 1)
-                edge_updates = [(related_login, login, base_weight)]
+                # Infer that the follower follows this user, even if their record omits that relationship.
+                inferred_weight = relationship_scores.get("following", 1)
+                edge_updates = [(related_login, login, inferred_weight)]
                 if starred_degree:
                     # creates an outbound edge if the related user has starred this user's repositories
-                    edge_updates.append((login, related_login, base_weight + starred_weight))
+                    edge_updates.append((login, related_login, starred_weight))
             
             elif "mutual" in relation:
                 base_weight = relationship_scores.get("mutual", 1)
@@ -299,6 +324,7 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
                 continue
             # --
             
+            # add edges to the graph, updating weights if the new weight is greater than the existing weight
             for source, target, weight in edge_updates:
                 existing_weight = graph.get_edge_data(source, target, {}).get("weight", 0)
                 if weight > existing_weight:
@@ -306,71 +332,292 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
     
     return graph
 
-def guilt_by_association_scores(graph: nx.DiGraph, bad_logins: set) -> dict:
+def guilt_by_association_scores(
+    graph: nx.DiGraph,
+    bad_logins: set,
+    alpha: float = config.graph_pagerank_alpha,
+) -> dict:
     """
     Inputs: Relationship graph and set of blacklisted logins
     Outputs: Dict of login -> reverse personalized PageRank score (proximity to accounts following blacklisted accounts across n-hop paths)
     Method: Reverse Personalized PageRank (RPPR) seeded on blacklisted logins present in the reversed relationship graph
+    Information (per User): Guilt-by-association score (likelihood of being clustered with blacklisted users)
     """
     seed_nodes = [login for login in bad_logins if login in graph]
     if not seed_nodes: # no blacklisted accounts reachable in this graph, nothing to propagate
         return {}
     
+    # creates a personalization dictionary for the PageRank algorithm
     personalization = {login: 1 for login in seed_nodes}
+    
+    # reverses the graph to compute guilt-by-association scores based on proximity to blacklisted accounts
     reverse_graph = graph.reverse(copy=False)
     
-    return nx.pagerank(reverse_graph, alpha=config.graph_pagerank_alpha, personalization=personalization, weight="weight")
+    return nx.pagerank(reverse_graph, alpha=alpha, personalization=personalization, weight="weight")
 
 def scoring_battery(results: list[dict]) -> list[dict]:
     """
     Inputs: List of User dicts
     Outputs: List of User dicts with score (likelihood of being clustered with the activity set selectors in .config) added
     Method: Inclusion testing against blacklisted and suspicious indicators and link analysis.. 
-    Information (per User): Score
+    Information (per User): Scores
     """
     # retrieve scoring weights and blacklists from config.py
-    bad_match, suspicious_match = config.bad_match, config.suspicious_match_weight
+    bad_match = config.bad_match
     bad_logins = {login.casefold() for login in config.BAD_LOGINS}
-    bad_emails = {email.casefold() for email in config.BAD_EMAILS}
-    suspicious_substrings = config.SUSPICIOUS_SUBSTRINGS
-    graph_score_weight = config.graph_pagerank_weight
+    
+    # retrieve validation emails from config.py
+    validation_emails = {
+        email.strip().casefold()
+        for email in config.VALIDATION_SET_EMAILS
+        if isinstance(email, str) and email.strip()
+    }
+    
+    # retrieve blacklisted emails from config.py and exclude intersection with validation emails
+    bad_emails = {
+        email.casefold() for email in config.BAD_EMAILS
+    } - validation_emails
+    
+    # retrieve suspicious patterns from config.py
+    suspicious_patterns = config.SUSPICIOUS_PATTERNS
     
     # build the full relationship graph once and compute guilt-by-association scores for every reachable login
     graph = build_relationship_graph(results)
-    graph_scores = guilt_by_association_scores(graph, bad_logins)
+    pagerank_alphas = sorted(set(config.graph_pagerank_alphas) | {config.graph_pagerank_alpha})
+    graph_scores_by_alpha = {
+        alpha: guilt_by_association_scores(graph, bad_logins, alpha)
+        for alpha in pagerank_alphas
+    }
+    
+    scoring_graph_scores = graph_scores_by_alpha[config.graph_pagerank_alpha]
+    page_rank_values = list(scoring_graph_scores.values())
+    page_rank_minimum = min(page_rank_values, default=0)
+    page_rank_maximum = max(page_rank_values, default=0)
+    page_rank_range = page_rank_maximum - page_rank_minimum
+    
+    # precount pattern matches for login, full name, and non-validation emails (for eventual scoreY assignment).
+    substring_match_counts = []
+    
+    for user in results:
+        login = user.get("login").casefold() if isinstance(user.get("login"), str) else ""
+        fullname = user.get("name").casefold() if isinstance(user.get("name"), str) else ""
+        
+        # retrieve and normalize the user's email addresses, excluding validation emails
+        raw_emails = user.get("emails") or []
+        if isinstance(raw_emails, str):
+            raw_emails = [raw_emails]
+        
+        emails = [
+            email.casefold()
+            for email in raw_emails
+            if isinstance(email, str) and email.strip().casefold() not in validation_emails
+        ]
+        
+        searchable_values = [login, fullname, *emails]
+        
+        # count the number of suspicious pattern matches for this user's login, full name, and emails
+        match_count = sum(
+            sum(1 for _ in pattern.finditer(value))
+            for pattern in suspicious_patterns
+            for value in searchable_values
+        )
+        substring_match_counts.append(match_count)
+    
+    # determine the maximum number of suspicious substring matches across all users (used for linear scaling of match counts)
+    max_substring_matches = max(substring_match_counts, default=0)
     
     # check user values and score based on matches and corresponding weights
     for i, user in enumerate(results):
-        score, login_match, email_match = 0, False, False # initialize variables needed for scoring
-        login = user.get("login", "").casefold()
-        emails = [email.casefold() for email in user.get("emails", set())]
+        login = (user.get("login") or "").casefold()
+        
+        # build the list of emails for the user, excluding validation emails
+        emails = [
+            email.casefold()
+            for email in user.get("emails", set())
+            if isinstance(email, str) and email.casefold() not in validation_emails
+        ]
+        
         print(f"Scoring user {i + 1} of {len(results)}: {login}")
         
-        # hard-stop immediately for known malicious login/email matches
-        if login in bad_logins or any(email in bad_emails for email in emails):
-            print(f"User {login} matched blacklisted login or email")
-            user["score"] = bad_match # user almost certainly malicious (assuming blacklists are accurate)
-            continue
+        # retrieve the number of suspicious pattern matches for this user
+        substring_matches = substring_match_counts[i]
         
-        # check if any suspicious substrings in login or email
-        login_match = any(substring in login for substring in suspicious_substrings)
-        email_match = any(
-            any(substring in email for substring in suspicious_substrings)
-            for email in emails
+        # assign linearly scaled substring match count score to each user based on their count relative to the max substring match count
+        scaled_substring_matches = (
+            bad_match * (substring_matches / max_substring_matches) # omits floor values because floor = 0
+            if max_substring_matches
+            else 0
         )
         
-        if login_match:
-            score += suspicious_match
-        if email_match:
-            score += suspicious_match
+        # assign substring match values
+        user["substring_matches"] = substring_matches
+        user["substring_score"] = scaled_substring_matches # y-axis component of composite score
         
-        # guilt-by-association score: proximity to blacklisted accounts across the n-hop relationship graph
-        graph_score = graph_scores.get(login, 0)
-        if graph_score:
+        for alpha, graph_scores in graph_scores_by_alpha.items():
+            user[f"pagerank_alpha_{alpha:g}"] = graph_scores.get(login, 0)
+        
+        normalized_graph_score = 0 # initialize normalized graph score to 0 (edge case handling)
+        
+        # assigns guilt-by-association score based on PageRank within the relationship graph relative to the maximum and minimum PageRank values
+        ## guilt-by-association score: proximity to blacklisted accounts across the n-hop relationship graph
+        if page_rank_range > 0:
+            graph_score = scoring_graph_scores.get(login, page_rank_minimum)
+            
+            # social network analysis component of user scoring (x-axis)
+            normalized_graph_score = bad_match * (graph_score - page_rank_minimum) / page_rank_range
             # print(f"User {login} guilt-by-association PageRank score: {graph_score:.6f}")
-            score += graph_score * graph_score_weight
         
-        # assign the final score to the user dictionary (max of 90% to maintain distinction from blacklisted users)
-        user["score"] = min(score, bad_match * 0.90)
+        # assign max score for known malicious login/email matches
+        if login in bad_logins or any(email in bad_emails for email in emails):
+            print(f"User {login} matched blacklisted login or email")
+            normalized_graph_score = bad_match # assign maximum score for known malicious matches (override any previous score)
+        
+        # assign linearly scaled graph (guilt-by-association) score to each user based on their proportional raw graph scores
+        user["graph_score"] = normalized_graph_score # x-axis component of composite score
+        
+        # eigenvector-like composite score based on x and y components
+        composite_score = math.sqrt(normalized_graph_score**2 + user["substring_score"]**2)
+        
+        # scaled composite score (optional normalization or further scaling can be applied here if needed)
+        scaled_composite_score = bad_match * (composite_score / math.sqrt(bad_match**2 + bad_match**2))
+        ## as long as bad_match = 100, formula can be represented as composite_score / math.sqrt(2)
+        
+        user["composite_score"] = scaled_composite_score
     
     return results
+
+def validation_email_metrics(results: list[dict]) -> dict[str, int | float | None]:
+    """
+    Inputs: List of User dicts (results)
+    Outputs: Dictionary containing validation metrics (coverage, precision, recall, etc.)
+    Method: Compare the predicted suspicious users against the held-out validation email set to compute coverage, precision, and recall metrics
+    Information (per User): Whether the user's emails match any held-out validation emails
+    """
+    validation_emails = {
+        email.strip().casefold()
+        for email in config.VALIDATION_SET_EMAILS
+        if isinstance(email, str) and email.strip()
+    }
+    
+    # if there are no validation emails, return early with default metrics
+    if not validation_emails:
+        return {
+            "validation_emails_total": 0,
+            "validation_emails_found": 0,
+            "validation_email_coverage": None,
+            "validation_positive_accounts_found": 0,
+            "validation_average_precision": None,
+            "validation_recall_at_100": None,
+        }
+    
+    # organize users by their login for quick lookup
+    users_by_login = {}
+    for user in results:
+        login = user.get("login")
+        
+        if isinstance(login, str) and login.strip():
+            users_by_login[login.casefold()] = user
+    
+    # prepare list of candidate users and track found validation emails
+    candidates = []
+    found_emails = set()
+    
+    # iterate over users and collect matched validation emails and their scores
+    for login, user in users_by_login.items():
+        raw_emails = user.get("emails") or []
+        
+        if isinstance(raw_emails, str):
+            raw_emails = [raw_emails]
+        
+        # normalize and clean user emails for comparison with validation set
+        user_emails = {
+            email.strip().casefold()
+            for email in raw_emails
+            if isinstance(email, str) and email.strip()
+        }
+        
+        # determine which of the user's emails match the validation set
+        matched_emails = user_emails & validation_emails
+        found_emails.update(matched_emails)
+        
+        # retrieve the user's composite score, defaulting to 0.0 if not present or invalid
+        score = user.get("composite_score", 0.0)
+        if not isinstance(score, (int, float)):
+            score = 0.0
+        
+        # append the candidate user with their login, score, and matched emails to the list of candidates
+        candidates.append((login, float(score), matched_emails))
+    
+    # compute labels and scores for evaluation metrics
+    labels = [bool(matched_emails) for _, _, matched_emails in candidates]
+    scores = [score for _, score, _ in candidates]
+    
+    # compute the average precision score if there are both positive and negative labels
+    average_precision = (
+        average_precision_score(labels, scores)
+        if any(labels) and not all(labels)
+        else None
+    )
+    
+    # determine the top 100 candidates based on their composite scores and logins
+    top_100 = sorted(candidates, key=lambda item: (-item[1], item[0]))[:100]
+    top_100_emails = {
+        email
+        for _, _, matched_emails in top_100
+        for email in matched_emails
+    }
+    
+    # compute the set of emails found in the top 100 candidates
+    return {
+        "validation_emails_total": len(validation_emails),
+        "validation_emails_found": len(found_emails),
+        "validation_email_coverage": len(found_emails) / len(validation_emails),
+        "validation_positive_accounts_found": sum(labels),
+        "validation_average_precision": average_precision,
+        "validation_recall_at_100": len(top_100_emails) / len(validation_emails),
+    }
+
+def score_and_validate_user_results(
+    search_results: list[dict],
+    stored_records: Iterable[dict],
+) -> tuple[list[dict], dict[str, int | float | None]]:
+    """
+    Inputs: List of User dicts obtained from the search and User dicts retrieved from the database (users table)
+    Outputs: Tuple containing the scored search results and a dictionary of validation metrics
+    Method: Score the union of search results and stored records using the scoring battery, then compute validation metrics based on held-out validation emails.
+    Information (per User): Whether the user's emails match any held-out validation emails
+    """
+    candidates_by_login = {} # dictionary to store candidates keyed by their login (case-insensitive)
+    
+    # populate the candidates_by_login dictionary with stored records first, then with search results (overwrites existing records on match)
+    for record in stored_records:
+        login = record.get("login")
+        
+        if isinstance(login, str) and login.strip():
+            candidates_by_login[login.casefold()] = record
+    
+    for record in search_results:
+        login = record.get("login")
+        if isinstance(login, str) and login.strip():
+            candidates_by_login[login.casefold()] = record
+    
+    # score the combined candidates using the scoring battery and compute validation metrics
+    scored_candidates = scoring_battery(list(candidates_by_login.values()))
+    validation_metrics = validation_email_metrics(scored_candidates)
+    
+    # create a dictionary of scored candidates keyed by their login for easy lookup
+    scored_by_login = {
+        record["login"].casefold(): record
+        for record in scored_candidates
+        if isinstance(record.get("login"), str)
+    }
+    
+    # map the scored candidates back to the original search results to maintain order and include any missing fields
+    scored_search_results = [
+        scored_by_login.get(record["login"].casefold(), record)
+        if isinstance(record.get("login"), str)
+        else record
+        for record in search_results
+    ]
+    
+    return scored_search_results, validation_metrics

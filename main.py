@@ -67,7 +67,8 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
         return False, "Request timed out. Check your network connection."
     except requests.RequestException as e:
         return False, f"Network error occurred while validating token: {e}"
-        
+    
+    # Handle HTTP response error status codes
     if r.status_code == 401:
         return False, "Token is invalid, expired, or revoked."
     if r.status_code == 403:
@@ -75,6 +76,7 @@ def validate_personal_access_token(token: str) -> tuple[bool, str]:
     if r.status_code != 200:
         return False, f"Token validation failed with status code {r.status_code}: {r.text[:200]}"
     
+    # If the request is successful, store the authenticated user's login in the global state for later use
     state.authorized_login = r.json().get("login") # fetch authenticated user's login for use in constructing the user-agent string
     
     return True, "Token is valid."
@@ -104,11 +106,45 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
+def _validation_metrics(results_data: list[dict]) -> list[dict]:
+    """
+    Scores and validates the search results against stored user records and computes metrics related to validation emails.
+    Prints model validation metrics: email coverage, average precision, and Recall@100.
+    """
+    # score the search results and validate against stored user records
+    results_data, metrics = transform.score_and_validate_user_results(
+        results_data,
+        database.get_all_user_records(),
+    )
+    
+    # extract validation metrics from the results of the scoring and validation process
+    total_validation_emails = metrics["validation_emails_total"]
+    found_validation_emails = metrics["validation_emails_found"]
+    email_coverage = metrics["validation_email_coverage"]
+    average_precision = metrics["validation_average_precision"]
+    recall_at_100 = metrics["validation_recall_at_100"]
+    
+    # format and print the validation metrics for user readability
+    coverage_text = (
+        f"{found_validation_emails}/{total_validation_emails} ({email_coverage:.1%})"
+        if email_coverage is not None
+        else "N/A"
+    )
+    average_precision_text = f"{average_precision:.4f}" if average_precision is not None else "N/A"
+    recall_at_100_text = f"{recall_at_100:.4f}" if recall_at_100 is not None else "N/A"
+    
+    print(f"Validation email coverage: {coverage_text}")
+    print(f"Validation average precision: {average_precision_text}")
+    print(f"Validation Recall@100: {recall_at_100_text}")
+    
+    return results_data
+
 def _user_search(token) -> tuple[list[dict], str, str]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
     1. Exact: Returns info on the input User(s) and their followership and stargazing relationships
-    2. Partial: Returns info on all Users returned by the partial search query. User info includes followership and stargazing relationships. (This may return a large number of users, depending on the search term.)
+    2. Partial: Returns info on all Users returned by the partial search query
+    3. Email Reverse: Returns info on all Users associated with the input email(s) and their followership and stargazing relationships
     '''
     search_method = "User"
     
@@ -127,6 +163,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         search_method += "_Exact"
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         depth = menus.recursion_menu() # prompt user for desired recursion depth
+        
         user_data, target = search.user_search_exact(token, targets, depth) # specify recursion depth explicitly
     
     elif search_mode == "2": # User Search Partial
@@ -149,9 +186,21 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         menus.clear_terminal()
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        
+        # reverse search supplied emails to find associated GitHub logins and committer data
         logins, committer_data = search.email_reverse_search(token, targets)
         
-        user_data, target = search.user_search_exact(token, logins)
+        depth = menus.recursion_menu() # prompt user for desired recursion depth
+        
+        # fetch user data for the logins returned by the email reverse search
+        user_data, target = search.user_search_exact(token, logins, depth)
+        
+        # ensures outfile naming convention lists total count of actual user logins retrieved
+        target = (
+            user_data[0]["login"]
+            if len(user_data) == 1
+            else f"{len(user_data)}-Users"
+        )
         
         # check if target email addresses are not associated with fetched user dicts; add if missing
         if isinstance(committer_data, dict):
@@ -181,14 +230,13 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     else: # skip enrichment
         enriched = ""
     
-    # score results
-    user_data = transform.scoring_battery(user_data)
-    
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
     print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
     
+    # update outfile_title to reflect methods used to generate outfile data
     state.outfile_title = f"_{search_method}_{target}{enriched}"
+    
     return user_data
 
 def _organization_search(token) -> tuple[list[dict], str, str]:
@@ -257,7 +305,8 @@ if __name__ == '__main__':
     menus.clear_terminal()
     
     if choice == 1: # User Search
-        results_data = _user_search(token) # Fetch user data and target username
+        _results_data = _user_search(token) # Fetch user data and target username
+        results_data = _validation_metrics(_results_data) # Validate the fetched user data
         
         # write user records to sqlite database
         stored_count = database.store_user_records(results_data)

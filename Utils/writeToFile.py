@@ -1,4 +1,4 @@
-import os, re, openpyxl
+import json, os, re, openpyxl
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 
@@ -70,4 +70,22 @@ def write_to_excel(results_data) -> str:
     
     # Save results to workbook
 	wb.save(file_path)
+	return filename
+
+def write_to_json(results_data, file_title: str) -> str:
+	"""Write records to a timestamped JSON file in Downloads."""
+	date_str = datetime.now().strftime("%Y%m%d%H%M")
+	filename = f"{date_str}{file_title}.json"
+	downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+	os.makedirs(downloads_folder, exist_ok=True)
+	file_path = os.path.join(downloads_folder, filename)
+	json_records = [
+		{
+			key: sorted(value) if isinstance(value, set) else value
+			for key, value in record.items()
+		}
+		for record in results_data
+	]
+	with open(file_path, "w", encoding="utf-8") as output_file:
+		json.dump(json_records, output_file, ensure_ascii=False, indent=2)
 	return filename

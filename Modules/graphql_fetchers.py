@@ -1,6 +1,7 @@
 from typing import Any, List, Dict, Tuple, Optional
 
 import Modules.client as client
+import Modules.enrichment as enrichment
 import Utils.dataTransformations as transform
 
 """
@@ -184,6 +185,15 @@ def fetch_user_exact(
     # assign relationship values to the starred_users and relationships keys
     if normalized_target is not None:
         normalized_target["starred_users"] = starred_users
+        
+        # check if user should be classified as a follow botter (affects scoring)
+        normalized_target["isFollowBotter"] = enrichment.follow_bot_identification(
+            followers,
+            following,
+            set(starred_users),
+        )
+        
+        # assign relationship values to the normalized target user
         normalized_target["relationships"] = transform.compare_user_relations(
 			following,
 			followers,
@@ -260,6 +270,7 @@ def fetch_organization_exact(
     org: Optional[Dict] = None
     new_members = 0
     
+    # loop to fetch organization members with pagination
     while more_members:
         variables = { "members_cursor": members_cursor }
         
@@ -313,7 +324,8 @@ def fetch_organization_exact(
     if org is None:
         raise ValueError(f"Target organization '{login}' not found or no data returned from GitHub API.")
     
-    normalized_target = transform.normalize_record(org)
+    # normalize the organization record and set membership fields to "N/A" since it's not applicable for organizations
+    normalized_target = transform.normalize_record(org, is_user=False)
     normalized_target["membership"] = "N/A"
     normalized_target["membership_count"] = "N/A"
     
