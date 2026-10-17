@@ -203,10 +203,7 @@ def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
                 continue
             
             print(f"Request failed after 3 attempts for {url}: {error}")
-            return {
-                "total_count": 0,
-                "items": [],
-            }
+            raise
         
         if response.status_code == 422: # catches queries for users with no public commits
             print(f"GitHub rejected the commit search: {response.url}")
