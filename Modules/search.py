@@ -1,15 +1,20 @@
 from typing import Iterable
 
-import Modules.client as client
-import Modules.database as database
-import Modules.graphql_fetchers as graphql_fetchers
-import Modules.queries as queries
+from Modules import client, database, graphql_fetchers, queries
+import Utils.dataTransformations as transform
 
-def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 0, _visited: set[str] | None = None, _depth: int = 0) -> tuple[list[dict], str]: # Add user selection before return prompting for enrichment.
+def user_search_exact(
+    token: str,
+    login: str | Iterable[str],
+    recursions: int = 0,
+    _visited: set[str] | None = None,
+    _depth: int = 0,
+    extra_emails: dict[str, set[str]] | None = None,
+) -> tuple[list[dict], str]:
     """
     Inputs: GitHub Personal Access Token, one or more GitHub User logins, and an optional followership expansion depth
-    Outputs: List of target User profile dicts with followership relationships added
-    Method: GitHub GraphQL API with pagination. Recursion can be used to fetch follower relationship data
+    Outputs: List of enriched and persisted User records with followership relationships added
+    Method: Reuses cached records or fetches each uncached user, enriches and persists it, then optionally expands relationships recursively
     Information (per User): Login, createdAt, updatedAt, Name, Email, Bio, Location, Company, socialAccounts URLs
     """
     if isinstance(login, str):
@@ -31,11 +36,12 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
     # Iterate through each user-supplied login and fetch their data and followership relationships
     for user_login in logins:
         _visited.add(user_login.casefold())
+        related_logins: set[str] = set()
         
         # checks if a target user login already exists in the local SQLite cache and instead retrieves the existing record (skips fetching from GitHub)
         cached_user = database.get_user_record(user_login)
         if cached_user is not None:
-            target_rows.append(cached_user)
+            target_user = cached_user
             
             for related_login, relation in (cached_user.get("relationships") or {}).items():
                 if not isinstance(related_login, str) or not isinstance(relation, str):
@@ -44,31 +50,57 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
                 # extracts set of related logins for use as targets in recursion (if recursions > 0)
                 relation_type = relation.split(" and starred", 1)[0].strip()
                 if relation_type in {"following", "follower", "mutual", "starred"}:
-                    all_related_logins.add(related_login)
+                    related_logins.add(related_login)
             
             print(f"Depth {_depth}: {user_login} loaded from SQLite cache.")
+        else:
+            # fetch user data from GitHub GraphQL API
+            query = queries.graphql_user_exact_query(user_login)
+            try:
+                target_user, related_logins = graphql_fetchers.fetch_user_exact(
+                    token,
+                    query,
+                    user_login,
+                )
+            
+            # skip invalid logins and start processing the next login
+            except ValueError:
+                print(f"{user_login} skipped: Invalid Login")
+                continue
+            
+            # skip user searches that encounter excessive request failures (resiliency-oriented build decision)
+            except Exception as error:
+                print(f"{user_login} skipped after repeated GitHub request failure: {error}")
+                continue
+        
+        if target_user is None:
             continue
         
-        query = queries.graphql_user_exact_query(user_login) # Construct the GraphQL query string for current target user
+        # merge any committer email discovered during an email reverse search
+        login_key = target_user.get("login")
+        user_emails = (
+            extra_emails.get(login_key.casefold(), set())
+            if extra_emails and isinstance(login_key, str)
+            else set()
+        )
+        if user_emails:
+            emails = target_user.get("emails")
+            if isinstance(emails, str):
+                emails = {emails}
+            elif not isinstance(emails, set):
+                emails = set(emails or [])
+            emails.update(user_emails)
+            target_user["emails"] = emails
         
-        # error handling for input users with invalid logins (no corresponding account exists)
-        try:
-            target_user, related_logins = graphql_fetchers.fetch_user_exact(
-                token,
-                query,
-                user_login,
-            )
-        except ValueError:
-            print(f"{user_login} skipped: Invalid Login")
-            continue
+        # enrich user record with commit history
+        target_user = transform.user_commit_history(token, [target_user])[0]
         
-        except Exception as error: # catch-all for any other unexpected errors
-            print(f"{user_login} skipped after repeated GitHub request failure: {error}")
-            continue
+        # persist the enriched user record to the local SQLite cache
+        stored_count = database.store_user_records([target_user])
+        if stored_count != 1:
+            raise RuntimeError(f"Failed to persist user record for {target_user.get('login')!r}.")
         
-        # adds valid target_user to the list of targets to fetch data for
-        if target_user is not None:
-            target_rows.append(target_user)
+        target_rows.append(target_user)
         
         # updates the set of followership logins with newly discovered related logins from the current target user
         all_related_logins.update(related_logins)
@@ -86,7 +118,14 @@ def user_search_exact(token: str, login: str | Iterable[str], recursions: int = 
         # fetches data for the next set of logins via recursive call to user_search_exact
         if next_logins:
             # drops target value returned by recursive call
-            nested_rows, _ = user_search_exact(token, next_logins, recursions - 1, _visited, _depth + 1)
+            nested_rows, _ = user_search_exact(
+                token,
+                next_logins,
+                recursions - 1,
+                _visited,
+                _depth + 1,
+                extra_emails=extra_emails,
+            )
             target_rows.extend(nested_rows)
     
     # finalizes the relationships dict for each fetched target user by sorting the related logins
@@ -116,24 +155,40 @@ def user_search_partial(token: str, login_substring: str) -> tuple[list[dict], s
     #print(results)
     return results, login_substring
 
-def email_reverse_search(token: str, targets: str | Iterable[str]) -> tuple[set[str], dict[str, str | None]]:
+def email_reverse_search(
+    token: str,
+    targets: str | Iterable[str],
+) -> tuple[set[str], dict[str, set[str]]]:
     """
     Inputs: GitHub Personal Access Token and target email addresses
-    Outputs: Dict containing logins (keys) and their corresponding emails (values)
-    Method: GitHub Search API for commits with pagination
+    Outputs: Matching logins and their corresponding emails
+    Method: Includes cached email matches and searches paginated GitHub commit results
     Information (per User): Login, Email
     """
     base_url = "https://api.github.com/search/commits"
-    results: dict[str, str | None] = {}
+    results: dict[str, set[str]] = {}
     logins: set[str] = set()
-    seen: set[tuple[str | None, str | None]] = set()
     
     # handles len(targets) = 1 by converting a single string target into a list to avoid character indexing
     if isinstance(targets, str):
         targets = [targets]
-        
+    
+    else:
+        targets = list(targets)
+    
+    # prefetches cached user logins for all target emails to reduce the number of GitHub API requests
+    cached_logins_by_email = database.get_user_logins_by_emails(targets)
+    
     for i, target in enumerate(targets):
+        normalized_target = target.strip().casefold()
+        cached_logins = cached_logins_by_email.get(normalized_target, set())
         
+        # include cached matches, while continuing the GitHub search for additional logins
+        for login in cached_logins:
+            logins.add(login)
+            results.setdefault(login.casefold(), set()).add(normalized_target)
+        
+        # fetch the first page to determine the total number of available results
         params = {
             "q": f"committer-email:{target}",
             "per_page": 100,
@@ -141,35 +196,54 @@ def email_reverse_search(token: str, targets: str | Iterable[str]) -> tuple[set[
             "sort": "committer-date",
             "order": "desc"
         }
-        
+        # fetch commit data from GitHub Search API for the current target email
         response = client.rest_request(token, base_url, params)
         
+        # extract commit items from the response
         commits = response.get("items", [])
+        
         if not commits:
-            print(f"{i + 1} of {len(targets)} emails processed") # progress update message
+            print(
+                f"{i + 1} of {len(targets)} emails processed "
+                f"(matched {len(cached_logins)} cached user record(s))"
+            )
             continue
         
-        for item in commits:
-            login = (item.get("committer") or {}).get("login")
-            email = ((item.get("commit") or {}).get("committer") or {}).get("email")
+        total_count = response.get("total_count", len(commits))
+        if not isinstance(total_count, int):
+            total_count = len(commits)
+        total_results = max(total_count, len(commits))
+        total_pages = min((min(total_results, 1000) + 99) // 100, 10)
+        
+        for page in range(1, total_pages + 1):
+            if page > 1:
+                params["page"] = page
+                response = client.rest_request(token, base_url, params)
+                commits = response.get("items", [])
+                if not commits:
+                    break
             
-            # normalize email to lowercase for consistent comparison
-            email = email.casefold() if isinstance(email, str) else email
-            
-            pair = (login, email)
-            if pair in seen:
-                continue
-            
-            else:
-                seen.add(pair)
-            
-            if isinstance(login, str) and login.strip():
-                results[login] = email
+            # extract committer login and email from each retrieved commit item
+            for item in commits:
+                login = (item.get("committer") or {}).get("login")
+                email = ((item.get("commit") or {}).get("committer") or {}).get("email")
+                
+                # skip commit items without a usable GitHub login
+                if not isinstance(login, str) or not login.strip():
+                    continue
+                
+                # add the login to the set of identified logins for the current target email
                 logins.add(login)
+                
+                # add the normalized committer email to the login's email set
+                if isinstance(email, str) and email.strip():
+                    results.setdefault(login.casefold(), set()).add(email.strip().casefold())
         
         # progress update message
-        if login:
-            print(f"\nLogin identified for {target}: {i + 1} of {len(targets)} emails processed")
+        print(
+            f"{i + 1} of {len(targets)} emails processed "
+            f"(matched {len(cached_logins)} cached user record(s))"
+        )
     
     return logins, results
 

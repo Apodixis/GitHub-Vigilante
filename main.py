@@ -164,7 +164,8 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
         depth = menus.recursion_menu() # prompt user for desired recursion depth
         
-        user_data, target = search.user_search_exact(token, targets, depth) # specify recursion depth explicitly
+        # fetch user data for the logins in targets
+        user_data, target = search.user_search_exact(token, targets, depth)
     
     elif search_mode == "2": # User Search Partial
         search_method += "_Partial"
@@ -193,7 +194,12 @@ def _user_search(token) -> tuple[list[dict], str, str]:
         depth = menus.recursion_menu() # prompt user for desired recursion depth
         
         # fetch user data for the logins returned by the email reverse search
-        user_data, target = search.user_search_exact(token, logins, depth)
+        user_data, target = search.user_search_exact(
+            token,
+            logins,
+            depth,
+            extra_emails=committer_data,
+        )
         
         # ensures outfile naming convention lists total count of actual user logins retrieved
         target = (
@@ -201,34 +207,21 @@ def _user_search(token) -> tuple[list[dict], str, str]:
             if len(user_data) == 1
             else f"{len(user_data)}-Users"
         )
+    
+    if search_mode in {"1", "3"}:
+        enriched = "_Enriched"
+    
+    else: # allows optional enrichment of other search modes (partial + other future methods)
+        # pause the timer while waiting on user input, then resume by shifting start_time forward
+        prompt_start = time.perf_counter()
+        choice = menus.selection_menu(enrichment_options)
+        start_time += time.perf_counter() - prompt_start
         
-        # check if target email addresses are not associated with fetched user dicts; add if missing
-        if isinstance(committer_data, dict):
-            for user in user_data:
-                if not isinstance(user, dict):
-                    continue
-                
-                login = user.get("login")
-                email = committer_data.get(login)
-                if email is None:
-                    continue
-                
-                if email not in user["emails"]:
-                    user["emails"].add(email)
-        # --
-    
-    # pause the timer while waiting on user input, then resume by shifting start_time forward
-    prompt_start = time.perf_counter()
-    choice = menus.selection_menu(enrichment_options)
-    start_time += time.perf_counter() - prompt_start
-    # --
-    
-    if choice == "1": # enrich current results data, takes significantly longer
-        enriched = "_Enriched" # leading underscore included to match outfile naming convention
-        user_data = transform.user_commit_history(token, user_data)
-    
-    else: # skip enrichment
-        enriched = ""
+        if choice == "1":
+            enriched = "_Enriched"
+            user_data = transform.user_commit_history(token, user_data)
+        else:
+            enriched = ""
     
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
@@ -300,6 +293,9 @@ if __name__ == '__main__':
     if not is_valid:
         print(message)
         menus.quit_program()
+    
+    # initialize the SQLite database to prevent errors when checking for existing user records or storing new records
+    database.initialize_database()
     
     choice = _decision_tree() # Begin program execution
     menus.clear_terminal()

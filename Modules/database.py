@@ -205,6 +205,62 @@ def get_all_user_records(database_path: str | Path = DATABASE_PATH) -> list[dict
     
     return [_user_record_from_row(row) for row in rows]
 
+def get_user_logins_by_emails(
+    emails: Iterable[str],
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, set[str]]:
+    """Find cached user logins indexed by normalized email address."""
+    # normalize the target emails to lowercase and remove whitespace to facilitate case-insensitive matching
+    target_emails = {
+        email.strip().casefold()
+        for email in emails
+        if isinstance(email, str) and email.strip()
+    }
+    
+    if not target_emails:
+        return {}
+    
+    path = Path(database_path)
+    if not path.is_file():
+        return {}
+    
+    # fetch all user records from the database
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        table_exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+        ).fetchone() is not None
+        
+        if not table_exists:
+            return {}
+        
+        # fetch all user logins and their associated emails from the users table
+        rows = connection.execute("SELECT login, emails FROM users").fetchall()
+    
+    # extract logins from each record
+    logins_by_email: dict[str, set[str]] = {}
+    for row in rows:
+        login = row["login"]
+        if not isinstance(login, str) or not login.strip():
+            continue
+        
+        # extract and normalize the emails associated with this login
+        raw_emails = row["emails"]
+        stored_emails = json.loads(raw_emails) if isinstance(raw_emails, str) else raw_emails
+        if isinstance(stored_emails, str):
+            stored_emails = [stored_emails]
+        
+        # add logins to the mapping for each normalized email that matches a target email
+        for email in stored_emails or []:
+            if not isinstance(email, str):
+                continue
+            normalized_email = email.strip().casefold()
+            if normalized_email in target_emails:
+                logins_by_email.setdefault(normalized_email, set()).add(login)
+    
+    # 
+    return logins_by_email
+
 
 def normalize_user_table(database_path: str | Path = DATABASE_PATH) -> int:
     """Rebuild the users table in canonical exact-search field order."""
@@ -264,6 +320,7 @@ def _ensure_users_table_schema(database_path: str | Path) -> None:
     with closing(sqlite3.connect(database_path)) as connection:
         # check if the users table exists, otherwise normalization is not necessary
         table_exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").fetchone() is not None
+        
         if not table_exists:
             return
         
@@ -273,6 +330,14 @@ def _ensure_users_table_schema(database_path: str | Path) -> None:
     # if the columns do not match the expected schema, normalize the users table
     if columns != _USER_COLUMNS:
         normalize_user_table(database_path)
+
+def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
+    """Create the users table at application startup, normalizing an existing schema if needed."""
+    _ensure_users_table_schema(database_path)
+    
+    with closing(sqlite3.connect(database_path)) as connection:
+        with connection:
+            connection.execute(_CREATE_USERS_TABLE)
 
 def store_user_records(records: Iterable[dict[str, Any]], database_path: str | Path = DATABASE_PATH) -> int:
     """Create or update user rows and return the number of rows processed."""

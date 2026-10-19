@@ -277,6 +277,13 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
     relationship_scores = config.relationship_scores
     graph = nx.DiGraph()
     
+    # precompute a set of all recorded logins to facilitate relationship inference for users with no direct record in the results
+    recorded_logins = {
+        login.casefold()
+        for user in results
+        if isinstance((login := user.get("login")), str) and login.strip()
+    }
+    
     # iterate over each user in the results to build a directed graph user relationships
     for user in results:
         login = (user.get("login") or "").casefold()
@@ -303,12 +310,15 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
                 edge_updates = [(login, related_login, base_weight + starred_weight)]
             
             elif "follower" in relation:
-                # Infer that the follower follows this user, even if their record omits that relationship.
-                inferred_weight = relationship_scores.get("following", 1)
-                edge_updates = [(related_login, login, inferred_weight)]
+                # If the follower has no record, infer their following relationship from this user's record.
+                inferred_relationship = (
+                    "following" if related_login not in recorded_logins else "follower"
+                )
+                base_weight = relationship_scores.get(inferred_relationship, 1)
+                edge_updates = [(related_login, login, base_weight)]
                 if starred_degree:
                     # creates an outbound edge if the related user has starred this user's repositories
-                    edge_updates.append((login, related_login, starred_weight))
+                    edge_updates.append((login, related_login, base_weight + starred_weight))
             
             elif "mutual" in relation:
                 base_weight = relationship_scores.get("mutual", 1)

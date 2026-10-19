@@ -3,7 +3,7 @@
 import config
 
 
-def follow_bot_identification(followers: set[str], following: set[str], starred: set[str]) -> dict[str, bool]:
+def follow_bot_identification(followers: set[str], following: set[str], starred: set[str]) -> bool:
     """Return positive follow-bot labels based on relationship counts and ratio."""
     all_relationships = len(followers) + len(following) + len(starred)
     outbound_relationships = len(following) + len(starred)
