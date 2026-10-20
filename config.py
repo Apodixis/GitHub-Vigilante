@@ -76,6 +76,12 @@ FOLLOW_BOTTERS = {
 
 # List of known malicious user attributes excluded from the blacklist with unknown association to the blacklisted users and emails.
 ## Used exclusively to validate the performance of the underlying scoring algorithms
+VALIDATION_SET_LOGINS = set(
+    "user1",
+    "user2",
+    "user3"
+)
+
 VALIDATION_SET_EMAILS = {
     "test@example.com",
     "validation@example.com",

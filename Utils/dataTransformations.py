@@ -144,7 +144,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     Method: GitHub REST API search endpoint
     Information (per User): Email, Timestomped Commits? (bool)
     """
-    # calculate batch sizes for us in queries
+    # calculate batch sizes for use in queries
     api_points_per_request = 400
     repo_count = 3
     nodes_per_repo = 3 
@@ -163,10 +163,14 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
     for i in range(0,len(logins), user_count):
         batch_logins = logins[i:i+user_count]
         
+        # fetch repository-commit pairs for each user in the batch using a GraphQL query
         initial_query = queries.graphql_commit_enrichment_query_1(batch_logins, repo_count)
         initial_results = client.graphql_request(token, initial_query)
+        
+        
         if initial_results.get("errors"):
             raise RuntimeError(f"GraphQL error: {initial_results['errors']}")
+        
         initial_results = initial_results.get("data", {})
         
         repo_commit_pairs_by_user: list[tuple[str, dict[str, str]]] = []
@@ -176,6 +180,7 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
             if not k.startswith(("oldestRepos", "newestRepos")):
                 continue
             
+            # extract owner login and repository names, and branch names
             for repository in v["repositories"]["nodes"]:
                 user, repo = repository["nameWithOwner"].split("/", 1)
                 default_branch = repository.get("defaultBranchRef") or {}
@@ -183,12 +188,15 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
                 if not default_branch: # empty repositories can return None for defaultBranchRef
                     continue
                 
+                # extract the commit OID
                 commit_oid = default_branch["target"]["oid"]
                 
+                # checks to see if the user already exists.
                 for existing_user, repositories in repo_commit_pairs_by_user:
                     if existing_user == user:
                         repositories[repo] = commit_oid
                         break
+                
                 else:
                     repo_commit_pairs_by_user.append((user, {repo: commit_oid}))
         # --
@@ -289,6 +297,7 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
         login = (user.get("login") or "").casefold()
         if not login:
             continue
+        
         graph.add_node(login)
         
         starred_users = user.get("starred_users") or {}
@@ -499,25 +508,47 @@ def scoring_battery(results: list[dict]) -> list[dict]:
 def validation_email_metrics(results: list[dict]) -> dict[str, int | float | None]:
     """
     Inputs: List of User dicts (results)
-    Outputs: Dictionary containing validation metrics (coverage, precision, recall, etc.)
-    Method: Compare the predicted suspicious users against the held-out validation email set to compute coverage, precision, and recall metrics
-    Information (per User): Whether the user's emails match any held-out validation emails
+    Outputs: Dictionary containing validation coverage, ranking, precision, and recall metrics
+    Method: Compare ranked user records against held-out validation logins and emails
+    Information (per User): Whether the user's login or emails match held-out validation labels
     """
+    # validation logins and emails for comparison against the results
+    validation_logins = {
+        login.strip().casefold()
+        for login in config.VALIDATION_SET_LOGINS
+        if isinstance(login, str) and login.strip()
+    }
+    
+    # blacklist logins and emails for exclusion from validation metrics
+    blacklist_emails = {
+        email.strip().casefold()
+        for email in config.BAD_EMAILS
+        if isinstance(email, str) and email.strip()
+    }
+    
+    # subtract blacklisted emails from validation emails to ensure overlaps count only as blacklist records
     validation_emails = {
         email.strip().casefold()
         for email in config.VALIDATION_SET_EMAILS
         if isinstance(email, str) and email.strip()
-    }
+    } - blacklist_emails
     
-    # if there are no validation emails, return early with default metrics
-    if not validation_emails:
+    # checks whether any validation labels remain after excluding blacklisted emails
+    validation_labels_exist = bool(validation_logins or validation_emails)
+    
+    # if there are no validation labels, return early with default metrics
+    if not validation_labels_exist:
         return {
             "validation_emails_total": 0,
             "validation_emails_found": 0,
             "validation_email_coverage": None,
+            "validation_logins_total": 0,
+            "validation_logins_found": 0,
             "validation_positive_accounts_found": 0,
             "validation_average_precision": None,
-            "validation_recall_at_100": None,
+            "validation_recall_k": 0,
+            "validation_recall_at_k": None,
+            "validation_mean_reciprocal_rank": None,
         }
     
     # organize users by their login for quick lookup
@@ -528,9 +559,10 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         if isinstance(login, str) and login.strip():
             users_by_login[login.casefold()] = user
     
-    # prepare list of candidate users and track found validation emails
+    # prepare candidates and track validation labels represented in the records
     candidates = []
     found_emails = set()
+    found_logins = set()
     
     # iterate over users and collect matched validation emails and their scores
     for login, user in users_by_login.items():
@@ -550,17 +582,22 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         matched_emails = user_emails & validation_emails
         found_emails.update(matched_emails)
         
+        # determine if the user's login matches any held-out validation logins
+        if login in validation_logins:
+            found_logins.add(login)
+        
         # retrieve the user's composite score, defaulting to 0.0 if not present or invalid
         score = user.get("composite_score", 0.0)
         if not isinstance(score, (int, float)):
             score = 0.0
         
-        # append the candidate user with their login, score, and matched emails to the list of candidates
-        candidates.append((login, float(score), matched_emails))
+        # append the account label along with each candidate's login, score, and matched emails
+        is_validation_account = login in validation_logins or bool(matched_emails)
+        candidates.append((login, float(score), matched_emails, is_validation_account))
     
     # compute labels and scores for evaluation metrics
-    labels = [bool(matched_emails) for _, _, matched_emails in candidates]
-    scores = [score for _, score, _ in candidates]
+    labels = [is_validation_account for _, _, _, is_validation_account in candidates]
+    scores = [score for _, score, _, _ in candidates]
     
     # compute the average precision score if there are both positive and negative labels
     average_precision = (
@@ -569,22 +606,42 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         else None
     )
     
-    # determine the top 100 candidates based on their composite scores and logins
-    top_100 = sorted(candidates, key=lambda item: (-item[1], item[0]))[:100]
-    top_100_emails = {
-        email
-        for _, _, matched_emails in top_100
-        for email in matched_emails
-    }
+    # rank candidates by composite score, using login as a deterministic tie-breaker
+    ranked_candidates = sorted(candidates, key=lambda item: (-item[1], item[0]))
+    relevant_account_count = sum(labels)
+    top_k = ranked_candidates[:relevant_account_count]
+
+    # calculate reciprocal rank for each unique validation account record
+    reciprocal_rank_total = sum(
+        1 / rank
+        for rank, candidate in enumerate(ranked_candidates, start=1)
+        if candidate[3]
+    )
+    mean_reciprocal_rank = (
+        reciprocal_rank_total / relevant_account_count
+        if relevant_account_count
+        else None
+    )
     
-    # compute the set of emails found in the top 100 candidates
     return {
         "validation_emails_total": len(validation_emails),
         "validation_emails_found": len(found_emails),
-        "validation_email_coverage": len(found_emails) / len(validation_emails),
-        "validation_positive_accounts_found": sum(labels),
+        "validation_email_coverage": (
+            len(found_emails) / len(validation_emails)
+            if validation_emails
+            else None
+        ),
+        "validation_logins_total": len(validation_logins),
+        "validation_logins_found": len(found_logins),
+        "validation_positive_accounts_found": relevant_account_count,
         "validation_average_precision": average_precision,
-        "validation_recall_at_100": len(top_100_emails) / len(validation_emails),
+        "validation_recall_k": relevant_account_count,
+        "validation_recall_at_k": (
+            sum(candidate[3] for candidate in top_k) / relevant_account_count
+            if relevant_account_count
+            else None
+        ),
+        "validation_mean_reciprocal_rank": mean_reciprocal_rank,
     }
 
 def score_and_validate_user_results(

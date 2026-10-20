@@ -106,10 +106,12 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
-def _validation_metrics(results_data: list[dict]) -> list[dict]:
+def _validation_metrics(
+    results_data: list[dict],
+) -> tuple[list[dict], dict[str, int | float | None]]:
     """
     Scores and validates the search results against stored user records and computes metrics related to validation emails.
-    Prints model validation metrics: email coverage, average precision, and Recall@100.
+    Prints model validation metrics: validation coverage, average precision, Recall@K, and mean reciprocal rank.
     """
     # score the search results and validate against stored user records
     results_data, metrics = transform.score_and_validate_user_results(
@@ -122,7 +124,9 @@ def _validation_metrics(results_data: list[dict]) -> list[dict]:
     found_validation_emails = metrics["validation_emails_found"]
     email_coverage = metrics["validation_email_coverage"]
     average_precision = metrics["validation_average_precision"]
-    recall_at_100 = metrics["validation_recall_at_100"]
+    recall_at_k = metrics["validation_recall_at_k"]
+    recall_k = metrics["validation_recall_k"]
+    mean_reciprocal_rank = metrics["validation_mean_reciprocal_rank"]
     
     # format and print the validation metrics for user readability
     coverage_text = (
@@ -131,15 +135,26 @@ def _validation_metrics(results_data: list[dict]) -> list[dict]:
         else "N/A"
     )
     average_precision_text = f"{average_precision:.4f}" if average_precision is not None else "N/A"
-    recall_at_100_text = f"{recall_at_100:.4f}" if recall_at_100 is not None else "N/A"
+    recall_at_k_text = f"{recall_at_k:.4f}" if recall_at_k is not None else "N/A"
+    mean_reciprocal_rank_text = (
+        f"{mean_reciprocal_rank:.4f}"
+        if mean_reciprocal_rank is not None
+        else "N/A"
+    )
     
     print(f"Validation email coverage: {coverage_text}")
+    print(
+        "Validation logins found: "
+        f"{metrics['validation_logins_found']}/{metrics['validation_logins_total']}"
+    )
     print(f"Validation average precision: {average_precision_text}")
-    print(f"Validation Recall@100: {recall_at_100_text}")
+    print(f"Validation Recall@K (K={recall_k}): {recall_at_k_text}")
+    print(f"Validation mean reciprocal rank: {mean_reciprocal_rank_text}")
+    # -- END OF VALIDATION METRICS PRINTING
     
-    return results_data
+    return results_data, metrics
 
-def _user_search(token) -> tuple[list[dict], str, str]:
+def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
     1. Exact: Returns info on the input User(s) and their followership and stargazing relationships
@@ -148,16 +163,27 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     '''
     search_method = "User"
     
+    # Initialize lists to store searched logins and emails
+    searched_logins: list[str] = []
+    searched_emails: list[str] = []
+    
+    # Prompt user to select the search mode (Exact, Partial, or Email Reverse)
     search_mode_options = [
         "User Search - Exact Match",
         "User Search - Partial Match",
         "User Search - Email Reverse Search"
         ]
     search_mode = menus.selection_menu(search_mode_options) # User Search Mode Selection
+    # -- END OF SEARCH MODE SELECTION
+    
     menus.clear_terminal()
     
     if search_mode == "1": # User Search Exact
         targets = menus.multiple_input_prompt("User login") # user input menu
+        
+        # Store the searched logins for later use in validation and output
+        searched_logins = [targets] if isinstance(targets, str) else list(targets)
+        
         menus.clear_terminal()
         
         search_method += "_Exact"
@@ -184,6 +210,10 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     elif search_mode == "3": # User Search Email
         search_method += "_Email"
         targets = menus.multiple_input_prompt("Email") # email input menu
+        
+        # Store the searched emails for later use in validation and output
+        searched_emails = [targets] if isinstance(targets, str) else list(targets)
+        
         menus.clear_terminal()
         
         start_time = time.perf_counter() # Start time measurement (Benchmarking)
@@ -230,7 +260,7 @@ def _user_search(token) -> tuple[list[dict], str, str]:
     # update outfile_title to reflect methods used to generate outfile data
     state.outfile_title = f"_{search_method}_{target}{enriched}"
     
-    return user_data
+    return user_data, searched_logins, searched_emails
 
 def _organization_search(token) -> tuple[list[dict], str, str]:
     '''
@@ -300,9 +330,16 @@ if __name__ == '__main__':
     choice = _decision_tree() # Begin program execution
     menus.clear_terminal()
     
+    # Initialize variables for storing results and validation metrics
+    validation_metrics = None
+    searched_logins = []
+    searched_emails = []
+    summary_user_records = None
+    
     if choice == 1: # User Search
-        _results_data = _user_search(token) # Fetch user data and target username
-        results_data = _validation_metrics(_results_data) # Validate the fetched user data
+        _results_data, searched_logins, searched_emails = _user_search(token)
+        results_data, validation_metrics = _validation_metrics(_results_data) # Validate the fetched user data
+        summary_user_records = results_data
         
         # write user records to sqlite database
         stored_count = database.store_user_records(results_data)
@@ -310,9 +347,18 @@ if __name__ == '__main__':
     
     elif choice == 2: # Organization Search
         results_data = _organization_search(token)
+        
+        # build user records summary for output file
+        summary_user_records = [
+            user for user in results_data
+            if user.get("membership") != "N/A"
+        ]
     
     elif choice == 3: # Pivot Engine
         results_data = _pivot_engine(token)
+        
+        # build user records summary for output file
+        summary_user_records = results_data
     
     elif choice == 4:
         print("PLACEHOLDER for additional functionality.")
@@ -322,4 +368,10 @@ if __name__ == '__main__':
         print("\nNO RESULTS RETURNED")
         menus.quit_program()
     
-    writeToFile.write_to_excel(results_data) # Write results data to an Excel file
+    writeToFile.write_to_excel(
+        results_data,
+        validation_metrics,
+        searched_logins=searched_logins,
+        searched_emails=searched_emails,
+        user_records=summary_user_records,
+    ) # Write results data and validation metrics to an Excel file

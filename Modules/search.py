@@ -162,7 +162,7 @@ def email_reverse_search(
     """
     Inputs: GitHub Personal Access Token and target email addresses
     Outputs: Matching logins and their corresponding emails
-    Method: Includes cached email matches and searches paginated GitHub commit results
+    Method: Includes cached email matches and searches the oldest 100 GitHub commit results per email
     Information (per User): Login, Email
     """
     base_url = "https://api.github.com/search/commits"
@@ -188,13 +188,13 @@ def email_reverse_search(
             logins.add(login)
             results.setdefault(login.casefold(), set()).add(normalized_target)
         
-        # fetch the first page to determine the total number of available results
+        # fetch only the oldest page of up to 100 commit results for this email
         params = {
             "q": f"committer-email:{target}",
             "per_page": 100,
             "page": 1,
             "sort": "committer-date",
-            "order": "desc"
+            "order": "asc"
         }
         # fetch commit data from GitHub Search API for the current target email
         response = client.rest_request(token, base_url, params)
@@ -209,35 +209,21 @@ def email_reverse_search(
             )
             continue
         
-        total_count = response.get("total_count", len(commits))
-        if not isinstance(total_count, int):
-            total_count = len(commits)
-        total_results = max(total_count, len(commits))
-        total_pages = min((min(total_results, 1000) + 99) // 100, 10)
-        
-        for page in range(1, total_pages + 1):
-            if page > 1:
-                params["page"] = page
-                response = client.rest_request(token, base_url, params)
-                commits = response.get("items", [])
-                if not commits:
-                    break
-            
-            # extract committer login and email from each retrieved commit item
-            for item in commits:
-                login = (item.get("committer") or {}).get("login")
-                email = ((item.get("commit") or {}).get("committer") or {}).get("email")
-                
-                # skip commit items without a usable GitHub login
-                if not isinstance(login, str) or not login.strip():
-                    continue
-                
-                # add the login to the set of identified logins for the current target email
-                logins.add(login)
-                
-                # add the normalized committer email to the login's email set
-                if isinstance(email, str) and email.strip():
-                    results.setdefault(login.casefold(), set()).add(email.strip().casefold())
+        # extract committer login and email from each commit in the single returned page
+        for item in commits:
+            login = (item.get("committer") or {}).get("login")
+            email = ((item.get("commit") or {}).get("committer") or {}).get("email")
+
+            # skip commit items without a usable GitHub login
+            if not isinstance(login, str) or not login.strip():
+                continue
+
+            # add the login to the set of identified logins for the current target email
+            logins.add(login)
+
+            # add the normalized committer email to the login's email set
+            if isinstance(email, str) and email.strip():
+                results.setdefault(login.casefold(), set()).add(email.strip().casefold())
         
         # progress update message
         print(
