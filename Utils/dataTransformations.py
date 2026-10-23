@@ -203,12 +203,14 @@ def user_commit_history(token: str, results: list[dict]) -> list[dict]: # enrich
         
         total_enriched_records += len(repo_commit_pairs_by_user)
         
-        # provide progress updates and skip batches with no identified repository-commit pairs
-        if repo_commit_pairs_by_user:
+        # provide batch progress updates only when multiple users are processed together.
+        if len(logins) > 1 and repo_commit_pairs_by_user:
             print(f"Batch {i // user_count + 1}: {len(repo_commit_pairs_by_user)} user records harvested. Total enriched records: {total_enriched_records}")
         
+        # provide batch progress updates when no repository-commit pairs are identified
         elif not repo_commit_pairs_by_user:
-            print(f"Batch {i // user_count + 1}: No repository-commit pairs found, skipping.")
+            if len(logins) > 1:
+                print(f"Batch {i // user_count + 1}: No repository-commit pairs found, skipping.")
             continue
         # --
         
@@ -434,9 +436,9 @@ def scoring_battery(results: list[dict]) -> list[dict]:
         
         searchable_values = [login, fullname, *emails]
         
-        # count the number of suspicious pattern matches for this user's login, full name, and emails
+        # count each suspicious pattern at most once per searchable value
         match_count = sum(
-            sum(1 for _ in pattern.finditer(value))
+            pattern.search(value) is not None
             for pattern in suspicious_patterns
             for value in searchable_values
         )
@@ -511,11 +513,19 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
     Outputs: Dictionary containing validation coverage, ranking, precision, and recall metrics
     Method: Compare ranked user records against held-out validation logins and emails
     Information (per User): Whether the user's login or emails match held-out validation labels
+    Ranking metrics exclude blacklisted accounts from their candidate lists.
     """
     # validation logins and emails for comparison against the results
     validation_logins = {
         login.strip().casefold()
         for login in config.VALIDATION_SET_LOGINS
+        if isinstance(login, str) and login.strip()
+    }
+    
+    # blacklist logins for exclusion from validation metrics
+    blacklist_logins = {
+        login.strip().casefold()
+        for login in config.BAD_LOGINS
         if isinstance(login, str) and login.strip()
     }
     
@@ -559,7 +569,7 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         if isinstance(login, str) and login.strip():
             users_by_login[login.casefold()] = user
     
-    # prepare candidates and track validation labels represented in the records
+    # prepare eligible ranking candidates and track validation labels represented in the records
     candidates = []
     found_emails = set()
     found_logins = set()
@@ -593,7 +603,18 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         
         # append the account label along with each candidate's login, score, and matched emails
         is_validation_account = login in validation_logins or bool(matched_emails)
-        candidates.append((login, float(score), matched_emails, is_validation_account))
+        graph_score = user.get("graph_score", 0.0)
+
+        # exclude known bad accounts from every ranking metric
+        if login in blacklist_logins or user_emails.intersection(blacklist_emails):
+            continue
+
+        # exclude isolated validation users to avoid distorting evaluation metrics
+        if is_validation_account and graph_score == 0:
+            continue
+
+        candidate = (login, float(score), matched_emails, is_validation_account)
+        candidates.append(candidate)
     
     # compute labels and scores for evaluation metrics
     labels = [is_validation_account for _, _, _, is_validation_account in candidates]
@@ -611,15 +632,18 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
     relevant_account_count = sum(labels)
     top_k = ranked_candidates[:relevant_account_count]
 
-    # calculate reciprocal rank for each unique validation account record
+    # A-MRR uses the same blacklist-filtered candidate pool as the other ranking metrics
+    mrr_relevant_account_count = relevant_account_count
+
+    # calculate reciprocal rank for each eligible validation account record
     reciprocal_rank_total = sum(
         1 / rank
         for rank, candidate in enumerate(ranked_candidates, start=1)
         if candidate[3]
     )
     mean_reciprocal_rank = (
-        reciprocal_rank_total / relevant_account_count
-        if relevant_account_count
+        reciprocal_rank_total / mrr_relevant_account_count
+        if mrr_relevant_account_count
         else None
     )
     
@@ -643,6 +667,90 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         ),
         "validation_mean_reciprocal_rank": mean_reciprocal_rank,
     }
+
+def validation_metrics_by_alpha(results: list[dict]) -> dict[float, dict[str, int | float | None]]:
+    """Calculate validation metrics using a composite score generated for each PageRank alpha."""
+    pagerank_alphas = sorted(set(config.graph_pagerank_alphas) | {config.graph_pagerank_alpha})
+    bad_match = config.bad_match
+    bad_logins = {login.casefold() for login in config.BAD_LOGINS}
+    validation_emails = {
+        email.strip().casefold()
+        for email in config.VALIDATION_SET_EMAILS
+        if isinstance(email, str) and email.strip()
+    }
+    
+    # subtract blacklisted emails from validation emails to ensure overlaps count only as blacklist records
+    bad_emails = {email.casefold() for email in config.BAD_EMAILS} - validation_emails
+    
+    # build the relationship graph once and compute guilt-by-association scores for every reachable login
+    graph = build_relationship_graph(results)
+    metrics_by_alpha = {}
+    
+    # iterate over each PageRank alpha value to compute guilt-by-association scores and validation metrics
+    for alpha in pagerank_alphas:
+        graph_scores = guilt_by_association_scores(graph, bad_logins, alpha)
+        graph_values = list(graph_scores.values())
+        graph_minimum = min(graph_values, default=0)
+        graph_range = max(graph_values, default=0) - graph_minimum
+        alpha_results = []
+        
+        # iterate over each user in the results to compute their graph score, substring score, and composite score
+        for user in results:
+            login = user.get("login")
+            normalized_login = login.casefold() if isinstance(login, str) else ""
+            
+            # linearly scale the graph score based on the user's PageRank score relative to the minimum and maximum scores
+            graph_score = (
+                bad_match
+                * (graph_scores.get(normalized_login, graph_minimum) - graph_minimum)
+                / graph_range
+                if graph_range > 0
+                else 0
+            )
+            
+            # retrieve the user's email address(es)
+            raw_emails = user.get("emails") or []
+            
+            if isinstance(raw_emails, str):
+                raw_emails = [raw_emails]
+            
+            # normalize and clean user emails for comparison with validation set, excluding validation emails
+            user_emails = {
+                email.casefold()
+                for email in raw_emails
+                if isinstance(email, str) and email.casefold() not in validation_emails
+            }
+            
+            # assign the maximum score for known malicious login/email matches, overriding any previous graph score
+            if normalized_login in bad_logins or user_emails & bad_emails:
+                graph_score = bad_match
+            
+            # compute the composite score based on the graph score and substring score, ensuring both are numeric
+            substring_score = user.get("substring_score")
+            
+            if not isinstance(substring_score, (int, float)):
+                raise ValueError(
+                    "Stored user records must have numeric substring_score values; "
+                    "run score_users() before validating."
+                )
+            
+            # compute the composite score as the Euclidean distance for axes (x: graph_score, y: substring_score)
+            composite_score = math.sqrt(graph_score**2 + substring_score**2)
+            
+            # compute the final, scored user record
+            scored_user = user.copy()
+            scored_user["graph_score"] = graph_score
+            scored_user["composite_score"] = bad_match * (
+                composite_score / math.sqrt(bad_match**2 + bad_match**2)
+            )
+            
+            # append the scored user record to the list for this alpha value
+            alpha_results.append(scored_user)
+        
+        # compute validation metrics for the scored user records at this alpha value
+        metrics_by_alpha[alpha] = validation_email_metrics(alpha_results)
+    
+    return metrics_by_alpha
 
 def score_and_validate_user_results(
     search_results: list[dict],

@@ -1,8 +1,12 @@
-# Local secrets and environment files
+# Local secrets and internal files
 .env
+.env*
 github_vigilante.sqlite3
 
 # Python bytecode and cache
 __pycache__/
 **/__pycache__/
 *.pyc
+
+# Helper Graphics
+*.svg

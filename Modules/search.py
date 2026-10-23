@@ -1,6 +1,6 @@
 from typing import Iterable
 
-from Modules import client, database, graphql_fetchers, queries
+from Modules import client, database, graphql_fetchers, queries, state
 import Utils.dataTransformations as transform
 
 def user_search_exact(
@@ -34,12 +34,12 @@ def user_search_exact(
     all_related_logins: set[str] = set()
     
     # Iterate through each user-supplied login and fetch their data and followership relationships
-    for user_login in logins:
+    for user_index, user_login in enumerate(logins, start=1):
         _visited.add(user_login.casefold())
         related_logins: set[str] = set()
         
         # checks if a target user login already exists in the local SQLite cache and instead retrieves the existing record (skips fetching from GitHub)
-        cached_user = database.get_user_record(user_login)
+        cached_user = database.get_user_record(user_login) if state.use_user_cache else None
         if cached_user is not None:
             target_user = cached_user
             
@@ -52,7 +52,6 @@ def user_search_exact(
                 if relation_type in {"following", "follower", "mutual", "starred"}:
                     related_logins.add(related_login)
             
-            print(f"Depth {_depth}: {user_login} loaded from SQLite cache.")
         else:
             # fetch user data from GitHub GraphQL API
             query = queries.graphql_user_exact_query(user_login)
@@ -104,7 +103,10 @@ def user_search_exact(
         
         # updates the set of followership logins with newly discovered related logins from the current target user
         all_related_logins.update(related_logins)
-        print(f"Depth {_depth}: {user_login} processed. {len(related_logins)} related user logins fetched.")
+        print(
+            f"User {user_index}/{len(logins)} processed: {user_login}. "
+            f"Depth {_depth}: {len(related_logins)} related user logins fetched."
+        )
     
     # recurse into newly discovered follower/following/starred logins, then return only fetched target records
     if recursions > 0 and all_related_logins:
@@ -177,7 +179,11 @@ def email_reverse_search(
         targets = list(targets)
     
     # prefetches cached user logins for all target emails to reduce the number of GitHub API requests
-    cached_logins_by_email = database.get_user_logins_by_emails(targets)
+    cached_logins_by_email = (
+        database.get_user_logins_by_emails(targets)
+        if state.use_user_cache
+        else {}
+    )
     
     for i, target in enumerate(targets):
         normalized_target = target.strip().casefold()

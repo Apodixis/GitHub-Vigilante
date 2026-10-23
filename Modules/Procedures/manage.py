@@ -10,13 +10,12 @@ if str(project_root) not in sys.path:
 
 import Modules.database as database
 import Modules.Procedures.procedures as procedures
+import Modules.state as state
 import Utils.dataTransformations as transform
+import Utils.writeToFile as writeToFile
 
 
-def load_user_records(
-	file_path: str | Path,
-	database_path: str | Path = database.DATABASE_PATH,
-) -> int:
+def load_user_records(file_path: str | Path, database_path: str | Path = database.DATABASE_PATH) -> int:
 	"""Import new users from a database export JSON file."""
 	return procedures.load_user_records(file_path, database_path)
 
@@ -24,9 +23,27 @@ def export_all_user_records() -> str:
 	"""Export all database users to JSON."""
 	return procedures.export_all_user_records()
 
-def normalize_user_records(
-	database_path: str | Path = database.DATABASE_PATH,
-) -> int:
+def write_user_records_to_excel(database_path: str | Path = database.DATABASE_PATH) -> str:
+	"""Export all stored user records to an Excel workbook."""
+	user_records = database.get_all_user_records(database_path)
+	excel_records = [
+		{
+			key: sorted(value) if isinstance(value, set) else value
+			for key, value in user.items()
+		}
+		for user in user_records
+	]
+	previous_outfile_title = state.outfile_title
+	state.outfile_title = f"_DB_Export_{len(excel_records)}_Users"
+	try:
+		return writeToFile.write_to_excel(
+			excel_records,
+			user_records=excel_records,
+		)
+	finally:
+		state.outfile_title = previous_outfile_title
+
+def normalize_user_records(database_path: str | Path = database.DATABASE_PATH) -> int:
 	"""Rebuild the users table using the exact-search record schema and field order."""
 	return database.normalize_user_table(database_path)
 
@@ -38,48 +55,61 @@ def score_users(database_path: str | Path = database.DATABASE_PATH) -> int:
 	scored_records = transform.scoring_battery(user_records)
 	return database.store_user_records(scored_records, database_path)
 
+def validate_users(database_path: str | Path = database.DATABASE_PATH) -> dict[str, int | float | None]:
+    """Calculate validation metrics for stored users without updating the database."""
+    user_records = database.get_all_user_records(database_path)
+    return transform.validation_email_metrics(user_records)
+
+def validate_users_by_alpha(database_path: str | Path = database.DATABASE_PATH) -> dict[float, dict[str, int | float | None]]:
+    """Exists solely to determine ideal alpha value for graph development."""
+    user_records = database.get_all_user_records(database_path)
+    return transform.validation_metrics_by_alpha(user_records)
+
 def _run_function_prompt() -> None:
-	"""Prompt for a function name and optional JSON arguments, then invoke it."""
-	available_functions = { # lists all function declared in this module
-		name: function
-		for name, function in globals().items()
-		if not name.startswith("_")
-		and inspect.isfunction(function)
-		and function.__module__ == __name__
-	}
-	print("Available functions:")
-	for name in available_functions:
-		print(f"  {name}")
-	
-	# function call loop
-	while True:
-		function_name = input("Function name (or 'exit'): ").strip()
-		if function_name.lower() in {"exit", "quit"}:
-			return
-		
-		function = available_functions.get(function_name)
-		if function is None:
-			print(f"Unknown function: {function_name}")
-			continue
-		
-		arguments_text = input("Arguments as JSON (blank for none): ").strip()
-		
-		# parse JSON arguments for the function call
-		try:
-			arguments = json.loads(arguments_text) if arguments_text else []
-			
-			if isinstance(arguments, list):
-				result = function(*arguments)
-			elif isinstance(arguments, dict):
-				result = function(**arguments)
-			else:
-				print("Arguments must be a JSON array or object.")
-				continue
-			
-			print(f"Result: {result!r}")
-		
-		except Exception as error:
-			print(f"Call failed: {error}")
+    """Prompt for a function name and optional JSON arguments, then invoke it."""
+    available_functions = { # lists all function declared in this module
+        name: function
+        for name, function in globals().items()
+        if not name.startswith("_")
+        and inspect.isfunction(function)
+        and function.__module__ == __name__
+    }
+    
+    print("Available functions:")
+    for name in available_functions:
+        print(f"  {name}")
+    
+    # function call loop
+    while True:
+        function_name = input("Function name (or 'exit'): ").strip()
+        if function_name.lower() in {"exit", "quit"}:
+            return
+        
+        function = available_functions.get(function_name)
+        if function is None:
+            print(f"Unknown function: {function_name}")
+            continue
+        
+        arguments_text = input("Arguments as JSON (blank for none): ").strip()
+        
+        # parse JSON arguments for the function call
+        try:
+            arguments = json.loads(arguments_text) if arguments_text else []
+            
+            if isinstance(arguments, list):
+                result = function(*arguments)
+            
+            elif isinstance(arguments, dict):
+                result = function(**arguments)
+            
+            else:
+                print("Arguments must be a JSON array or object.")
+                continue
+            
+            print(f"Result: {result!r}")
+        
+        except Exception as error:
+            print(f"Call failed: {error}")
 
 if __name__ == "__main__":
 	_run_function_prompt()

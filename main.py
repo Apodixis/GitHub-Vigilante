@@ -42,6 +42,12 @@ enrichment_options = [
     "Skip Enrichment"
     ]
 
+# Used in exact and email-reverse searches to determine whether cached user data is reused.
+cache_options = [
+    "Use cached user data when available",
+    "Ignore cached user data and fetch from GitHub"
+    ]
+
 ## GITHUB PERSONAL ACCESS TOKEN DECLARATION
 #--------------------------------------------------------------------------------
 ## PERSONAL ACCESS TOKEN TEST BLOCK
@@ -175,6 +181,10 @@ def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
         ]
     search_mode = menus.selection_menu(search_mode_options) # User Search Mode Selection
     # -- END OF SEARCH MODE SELECTION
+
+    if search_mode in {"1", "3"}:
+        cache_choice = menus.selection_menu(cache_options)
+        state.use_user_cache = cache_choice == "1"
     
     menus.clear_terminal()
     
