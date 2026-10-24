@@ -1,5 +1,6 @@
 """Interactive entry point for database interaction (importing and exporting records)."""
 
+# standard library packages (Python-native)
 import inspect, json, os, sys
 from pathlib import Path
 
@@ -8,39 +9,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
 	sys.path.insert(0, str(PROJECT_ROOT))
 
-import Utils.menus as menus
+# local imports
+from main import token, validate_personal_access_token
+from Modules import database, search, state
+from Modules.Procedures import procedures
+from Utils import menus, writeToFile, dataTransformations as transform
 
-ENV_PATH = PROJECT_ROOT / ".env"
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-if load_dotenv and ENV_PATH.exists():
-    load_dotenv(dotenv_path=ENV_PATH, override=False)
-elif not ENV_PATH.exists():
-    print(f"[env] No .env file found at: {ENV_PATH}. Please create and update GITHUB_API_TOKEN with your GitHub Personal Access Token.")
-
-# Always check existing environment token first
-token = os.getenv("GITHUB_API_TOKEN")
-
-# Fallback to prompt user for token if not found in environment variables
-if not token:
-    token = input("Enter your GitHub Personal Access Token: ").strip()
-
-# Exit if token is still not populated
-if not token:
-    print("GitHub Personal Access Token is required to proceed.")
-    menus.quit_program()
-
-import Modules.database as database
-import Modules.Procedures.procedures as procedures
-import Modules.search as search
-import Modules.state as state
-import Utils.dataTransformations as transform
-import Utils.writeToFile as writeToFile
-
+# network-related procedures that require a GitHub Personal Access Token to function
+token_required = {
+    "expand_database"
+}
 
 def load_user_records(file_path: str | Path, database_path: str | Path = database.DATABASE_PATH) -> int:
 	"""Import new users from a database export JSON file."""
@@ -129,7 +108,7 @@ def validate_users_by_alpha(database_path: str | Path = database.DATABASE_PATH) 
 
 def _run_function_prompt() -> None:
     """Prompt for a function name and optional JSON arguments, then invoke it."""
-    available_functions = { # lists all function declared in this module
+    available_functions = { # lists all functions declared in this module
         name: function
         for name, function in globals().items()
         if not name.startswith("_")
@@ -146,6 +125,14 @@ def _run_function_prompt() -> None:
         function_name = input("Function name (or 'exit'): ").strip()
         if function_name.lower() in {"exit", "quit"}:
             return
+        
+        # check if the function requires a personal access token
+        elif function_name in token_required:
+            # test if personal access token is valid
+            is_valid, message = validate_personal_access_token(token)
+            if not is_valid:
+                print(message)
+                menus.quit_program()
         
         function = available_functions.get(function_name)
         if function is None:
@@ -174,4 +161,4 @@ def _run_function_prompt() -> None:
             print(f"Call failed: {error}")
 
 if __name__ == "__main__":
-	_run_function_prompt()
+    _run_function_prompt()

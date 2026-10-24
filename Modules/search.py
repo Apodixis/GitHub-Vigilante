@@ -1,7 +1,10 @@
+# standard library packages (Python-native)
 from typing import Iterable
 
+# local imports
 from Modules import client, database, graphql_fetchers, queries, state
-import Utils.dataTransformations as transform
+from Utils import dataTransformations as transform
+
 
 def user_search_exact(
     token: str,

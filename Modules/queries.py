@@ -1,9 +1,9 @@
-import json
 """
 Central location for GraphQL and REST API query strings used in in requests.
 """
-# Query for GitHub user information, including followership and social accounts
-## DESIGN_NOTE: Potential Optimization - Omit Organization Info for follower/following in the initial user query, then build a batched user org query from the merged followership set.
+# standard library packages (Python-native)
+import json
+
 
 # Variable declarations for pagination and fetch limits
 page_size = 100

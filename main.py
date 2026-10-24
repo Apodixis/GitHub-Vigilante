@@ -1,12 +1,14 @@
-import os, time, requests
+# standard library packages (Python-native)
+import os, time
 from pathlib import Path
 
-import Modules.state as state # used to store global state variables like authorized_login
-import Utils.menus as menus # used to print option trees and to handle user input collection
-import Modules.search as search # consists of logic for each search method
-import Modules.database as database # used to persist user records in SQLite
-import Utils.dataTransformations as transform # used for transforming and enriching GitHub user data
-import Utils.writeToFile as writeToFile # used to write results to file (.xlsx)
+# local imports
+from Modules import database, search, state
+from Utils import menus, writeToFile, dataTransformations as transform
+
+# third-party packages
+import requests
+
 
 #--------------------------------------------------------------------------------
 ## GITHUB PERSONAL ACCESS TOKEN DECLARATION
@@ -181,7 +183,7 @@ def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
         ]
     search_mode = menus.selection_menu(search_mode_options) # User Search Mode Selection
     # -- END OF SEARCH MODE SELECTION
-
+    
     if search_mode in {"1", "3"}:
         cache_choice = menus.selection_menu(cache_options)
         state.use_user_cache = cache_choice == "1"

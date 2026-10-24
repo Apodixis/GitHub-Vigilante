@@ -1,8 +1,10 @@
-import sqlite3, json
+# standard library packages (Python-native)
+import json, sqlite3
 from contextlib import closing
 from pathlib import Path
 from typing import Any, Iterable
 
+# local import
 import config
 
 

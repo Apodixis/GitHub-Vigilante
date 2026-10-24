@@ -1,5 +1,6 @@
 """Enrich records based on retrieved user data field values."""
 
+# local import
 import config
 
 

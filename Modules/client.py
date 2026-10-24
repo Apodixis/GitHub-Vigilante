@@ -1,12 +1,17 @@
-import requests, time, re
-from collections import deque
-from typing import Dict, Optional, Any
-
-import Modules.state as state # access global state variables
-
 """
 Central location for sending HTTP requests and handling response contents
 """
+# standard library packages (Python-native)
+import re, time
+from collections import deque
+from typing import Any, Dict, Optional
+
+# local import
+from Modules import state # access global state variables
+
+# third-party packages
+import requests
+
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 

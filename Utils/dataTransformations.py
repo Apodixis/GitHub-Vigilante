@@ -1,12 +1,16 @@
-import math, networkx as nx
-
-from urllib.parse import urlsplit, urlunsplit
+# standard library packages (Python-native)
+import math
 from typing import Dict, Iterable
-from sklearn.metrics import average_precision_score
+from urllib.parse import urlsplit, urlunsplit
 
-import Modules.client as client
-import Modules.queries as queries
+# local imports
+from Modules import client, queries
 import config
+
+# third-party packages
+import networkx as nx
+from sklearn.metrics import average_precision_score # python module name for scikit-learn data science library
+
 
 ignore_email_substrings = ["noreply", "github-actions", "[bot]"]
 

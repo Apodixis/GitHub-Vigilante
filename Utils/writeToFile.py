@@ -1,9 +1,15 @@
-import json, os, re, openpyxl
-from openpyxl.utils import get_column_letter
+# standard library packages (Python-native)
+import json, os, re
 from datetime import datetime
 
-import Modules.state as state # access global state variables
+# local imports
 import config
+from Modules import state # access global state variables
+
+# third-party packages
+import openpyxl
+from openpyxl.utils import get_column_letter
+
 
 def _sanitize_excel_value(value):
     """

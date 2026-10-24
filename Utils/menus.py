@@ -1,4 +1,6 @@
-import sys, subprocess, os
+# standard library packages (Python-native)
+import os, subprocess, sys
+
 
 def quit_program() -> None:
     """

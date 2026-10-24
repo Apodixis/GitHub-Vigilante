@@ -1,11 +1,13 @@
 """Provide user-record database and Excel import/export workflows."""
 
+# standard library packages (Python-native)
 import json
 from pathlib import Path
 from typing import Any
 
-import Modules.database as database
-import Utils.writeToFile as write_to_file
+# local imports
+from Modules import database
+from Utils import writeToFile
 
 
 def get_all_user_records(database_path: str | Path = database.DATABASE_PATH) -> list[dict[str, Any]]:
@@ -84,4 +86,4 @@ def export_all_user_records() -> str:
 	"""Export all records from the users table to a JSON file."""
 	user_records = database.get_all_user_records()
 	file_title = f"_DB_Export_{len(user_records)}_Users"
-	return write_to_file.write_to_json(user_records, file_title)
+	return writeToFile.write_to_json(user_records, file_title)

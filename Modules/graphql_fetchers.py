@@ -1,12 +1,14 @@
-from typing import Any, List, Dict, Tuple, Optional
-
-import Modules.client as client
-import Modules.enrichment as enrichment
-import Utils.dataTransformations as transform
-
 """
 Paginates GraphQL connections and normalizes/merges the resulting records; sits between search.py (search orchestration) and client.py (HTTP transport)
 """
+# standard library packages (Python-native)
+from typing import Any, Dict, List, Optional, Tuple
+
+# local imports
+from Modules import client, enrichment
+from Utils import dataTransformations as transform
+
+
 # variable declarations for pagination and fetch limits
 page_size: int = 100
 max_following: int = 500
