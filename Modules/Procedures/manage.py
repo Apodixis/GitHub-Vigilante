@@ -54,7 +54,7 @@ def normalize_user_records(database_path: str | Path = database.DATABASE_PATH) -
 	return database.normalize_user_table(database_path)
 
 def expand_database(token: str = token) -> int:
-    """Fetch missing related users for scores >= 10, using the loaded token by default."""
+    """Fetch missing related users for scores >= 10, then rescore all stored users."""
     if not isinstance(token, str) or not token.strip():
         raise ValueError("A GitHub Personal Access Token is required.")
     
@@ -86,6 +86,7 @@ def expand_database(token: str = token) -> int:
     # fetch and persist the missing relationship logins
     print(f"Fetching {len(target_logins)} missing relationship logins at depth 0.")
     fetched_records, _ = search.user_search_exact(token, target_logins, recursions=0)
+    score_users() # Scores all stored users after fetching additional related logins
     return len(fetched_records)
 
 def score_users(database_path: str | Path = database.DATABASE_PATH) -> int:
@@ -100,11 +101,6 @@ def validate_users(database_path: str | Path = database.DATABASE_PATH) -> dict[s
     """Calculate validation metrics for stored users without updating the database."""
     user_records = database.get_all_user_records(database_path)
     return transform.validation_email_metrics(user_records)
-
-def validate_users_by_alpha(database_path: str | Path = database.DATABASE_PATH) -> dict[float, dict[str, int | float | None]]:
-    """Exists solely to determine ideal alpha value for graph development."""
-    user_records = database.get_all_user_records(database_path)
-    return transform.validation_metrics_by_alpha(user_records)
 
 def _run_function_prompt() -> None:
     """Prompt for a function name and optional JSON arguments, then invoke it."""

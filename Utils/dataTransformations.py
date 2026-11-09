@@ -360,7 +360,6 @@ def build_relationship_graph(results: list[dict]) -> nx.DiGraph:
 def guilt_by_association_scores(
     graph: nx.DiGraph,
     bad_logins: set,
-    alpha: float = config.graph_pagerank_alpha,
 ) -> dict:
     """
     Inputs: Relationship graph and set of blacklisted logins
@@ -378,7 +377,12 @@ def guilt_by_association_scores(
     # reverses the graph to compute guilt-by-association scores based on proximity to blacklisted accounts
     reverse_graph = graph.reverse(copy=False)
     
-    return nx.pagerank(reverse_graph, alpha=alpha, personalization=personalization, weight="weight")
+    return nx.pagerank(
+        reverse_graph,
+        alpha=config.graph_pagerank_alpha,
+        personalization=personalization,
+        weight="weight",
+    )
 
 def scoring_battery(results: list[dict]) -> list[dict]:
     """
@@ -408,13 +412,7 @@ def scoring_battery(results: list[dict]) -> list[dict]:
     
     # build the full relationship graph once and compute guilt-by-association scores for every reachable login
     graph = build_relationship_graph(results)
-    pagerank_alphas = sorted(set(config.graph_pagerank_alphas) | {config.graph_pagerank_alpha})
-    graph_scores_by_alpha = {
-        alpha: guilt_by_association_scores(graph, bad_logins, alpha)
-        for alpha in pagerank_alphas
-    }
-    
-    scoring_graph_scores = graph_scores_by_alpha[config.graph_pagerank_alpha]
+    scoring_graph_scores = guilt_by_association_scores(graph, bad_logins)
     page_rank_values = list(scoring_graph_scores.values())
     page_rank_minimum = min(page_rank_values, default=0)
     page_rank_maximum = max(page_rank_values, default=0)
@@ -477,9 +475,6 @@ def scoring_battery(results: list[dict]) -> list[dict]:
         # assign substring match values
         user["substring_matches"] = substring_matches
         user["substring_score"] = scaled_substring_matches # y-axis component of composite score
-        
-        for alpha, graph_scores in graph_scores_by_alpha.items():
-            user[f"pagerank_alpha_{alpha:g}"] = graph_scores.get(login, 0)
         
         normalized_graph_score = 0 # initialize normalized graph score to 0 (edge case handling)
         
@@ -671,90 +666,6 @@ def validation_email_metrics(results: list[dict]) -> dict[str, int | float | Non
         ),
         "validation_mean_reciprocal_rank": mean_reciprocal_rank,
     }
-
-def validation_metrics_by_alpha(results: list[dict]) -> dict[float, dict[str, int | float | None]]:
-    """Calculate validation metrics using a composite score generated for each PageRank alpha."""
-    pagerank_alphas = sorted(set(config.graph_pagerank_alphas) | {config.graph_pagerank_alpha})
-    bad_match = config.bad_match
-    bad_logins = {login.casefold() for login in config.BAD_LOGINS}
-    validation_emails = {
-        email.strip().casefold()
-        for email in config.VALIDATION_SET_EMAILS
-        if isinstance(email, str) and email.strip()
-    }
-    
-    # subtract blacklisted emails from validation emails to ensure overlaps count only as blacklist records
-    bad_emails = {email.casefold() for email in config.BAD_EMAILS} - validation_emails
-    
-    # build the relationship graph once and compute guilt-by-association scores for every reachable login
-    graph = build_relationship_graph(results)
-    metrics_by_alpha = {}
-    
-    # iterate over each PageRank alpha value to compute guilt-by-association scores and validation metrics
-    for alpha in pagerank_alphas:
-        graph_scores = guilt_by_association_scores(graph, bad_logins, alpha)
-        graph_values = list(graph_scores.values())
-        graph_minimum = min(graph_values, default=0)
-        graph_range = max(graph_values, default=0) - graph_minimum
-        alpha_results = []
-        
-        # iterate over each user in the results to compute their graph score, substring score, and composite score
-        for user in results:
-            login = user.get("login")
-            normalized_login = login.casefold() if isinstance(login, str) else ""
-            
-            # linearly scale the graph score based on the user's PageRank score relative to the minimum and maximum scores
-            graph_score = (
-                bad_match
-                * (graph_scores.get(normalized_login, graph_minimum) - graph_minimum)
-                / graph_range
-                if graph_range > 0
-                else 0
-            )
-            
-            # retrieve the user's email address(es)
-            raw_emails = user.get("emails") or []
-            
-            if isinstance(raw_emails, str):
-                raw_emails = [raw_emails]
-            
-            # normalize and clean user emails for comparison with validation set, excluding validation emails
-            user_emails = {
-                email.casefold()
-                for email in raw_emails
-                if isinstance(email, str) and email.casefold() not in validation_emails
-            }
-            
-            # assign the maximum score for known malicious login/email matches, overriding any previous graph score
-            if normalized_login in bad_logins or user_emails & bad_emails:
-                graph_score = bad_match
-            
-            # compute the composite score based on the graph score and substring score, ensuring both are numeric
-            substring_score = user.get("substring_score")
-            
-            if not isinstance(substring_score, (int, float)):
-                raise ValueError(
-                    "Stored user records must have numeric substring_score values; "
-                    "run score_users() before validating."
-                )
-            
-            # compute the composite score as the Euclidean distance for axes (x: graph_score, y: substring_score)
-            composite_score = math.sqrt(graph_score**2 + substring_score**2)
-            
-            # compute the final, scored user record
-            scored_user = user.copy()
-            scored_user["graph_score"] = graph_score
-            scored_user["composite_score"] = bad_match * (
-                composite_score / math.sqrt(bad_match**2 + bad_match**2)
-            )
-            
-            # append the scored user record to the list for this alpha value
-            alpha_results.append(scored_user)
-        
-        # compute validation metrics for the scored user records at this alpha value
-        metrics_by_alpha[alpha] = validation_email_metrics(alpha_results)
-    
-    return metrics_by_alpha
 
 def score_and_validate_user_results(
     search_results: list[dict],

@@ -14,6 +14,13 @@ __________________________________________________________________
 
 __________________________________________________________________
 
+## Scoring configuration
+Relationship scoring uses only `graph_pagerank_alpha` in [config.py](./config.py).
+Use `score_users()` in the database management interface to recompute stored scores
+after changing this value, and `validate_users()` to evaluate them.
+Existing databases are normalized automatically on initialization or the next write,
+removing obsolete per-alpha columns while preserving the remaining user data.
+
 ## Search Modes
 
 ### User Search

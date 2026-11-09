@@ -4,14 +4,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any, Iterable
 
-# local import
-import config
-
-
 DATABASE_PATH = Path(__file__).resolve().parent.parent / "github_vigilante.sqlite3"
-
-# define the set of alpha values used for pagerank calculations
-_ALPHAS = tuple(sorted(set(config.graph_pagerank_alphas) | {config.graph_pagerank_alpha}))
 
 # define user table schema
 _USER_COLUMN_DEFINITIONS = [
@@ -36,12 +29,6 @@ _USER_COLUMN_DEFINITIONS = [
     ("starred_users", "TEXT NOT NULL"),
 ]
 
-# define pagerank-related columns for each alpha value
-_USER_COLUMN_DEFINITIONS.extend(
-    (f"pagerank_alpha_{alpha:g}", "REAL NOT NULL")
-    for alpha in _ALPHAS
-)
-
 # define tuples for user columns, JSON fields, set fields, and boolean fields
 _USER_COLUMNS = tuple(name for name, _ in _USER_COLUMN_DEFINITIONS)
 _JSON_FIELDS = {"emails", "socialAccounts", "relationships", "organizations", "starred_users"}
@@ -63,10 +50,6 @@ _DEFAULTS: dict[str, Any] = {
     "substring_matches": 0,
     "starred_users": {},
 }
-
-# define default values for each alpha value's PageRank column
-for _alpha in _ALPHAS:
-    _DEFAULTS[f"pagerank_alpha_{_alpha:g}"] = 0.0
 
 # ensures safe quoting of SQL identifiers
 def _quote_identifier(identifier: str) -> str:

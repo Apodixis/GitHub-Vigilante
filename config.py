@@ -1,6 +1,6 @@
-# Used in score calculation for identifying malicious and likely malicious accounts for triage
-
+# third-party packages
 import regex
+
 
 # SCORE WEIGHTING VARIABLES
 bad_match = 100
@@ -11,9 +11,8 @@ BAD_FOLLOWING_WEIGHT = 0.5
 BAD_STARRED_WEIGHT = 0.1
 
 # personalized PageRank ("guilt-by-association") settings for relationship graph scoring
-graph_pagerank_alpha = 0.85 # optimal damping factor (per case study) to fit matches tighter to blacklisted users
-graph_pagerank_alphas = (0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85)
-# --
+graph_pagerank_alpha = 0.85 # reduced damping factor to fit matches tighter to blacklisted users
+# END WEIGHTING SETTINGS --
 
 relationship_scores = {
     "following": BAD_FOLLOWING_WEIGHT,
@@ -76,15 +75,7 @@ FOLLOW_BOTTERS = {
 
 # List of known malicious user attributes excluded from the blacklist with unknown association to the blacklisted users and emails.
 ## Used exclusively to validate the performance of the underlying scoring algorithms
-VALIDATION_SET_LOGINS = {
-    "user1",
-    "user2",
-    "user3"
-}
+VALIDATION_SET_LOGINS = {}
 
-# List of known malicious user attributes excluded from the blacklist with unknown association to the blacklisted users and emails.
-VALIDATION_SET_EMAILS = {
-    "test@example.com",
-    "validation@example.com",
-    "object@example.com"
-}
+# Set of suspicious/malicious user attributes excluded from the blacklist with unknown association to the blacklisted users and emails.
+VALIDATION_SET_EMAILS = {}
