@@ -9,7 +9,6 @@ import config
 
 # third-party packages
 import networkx as nx
-from sklearn.metrics import average_precision_score # python module name for scikit-learn data science library
 
 
 ignore_email_substrings = ["noreply", "github-actions", "[bot]"]
@@ -506,176 +505,14 @@ def scoring_battery(results: list[dict]) -> list[dict]:
     
     return results
 
-def validation_email_metrics(results: list[dict]) -> dict[str, int | float | None]:
-    """
-    Inputs: List of User dicts (results)
-    Outputs: Dictionary containing validation coverage, ranking, precision, and recall metrics
-    Method: Compare ranked user records against held-out validation logins and emails
-    Information (per User): Whether the user's login or emails match held-out validation labels
-    Ranking metrics exclude blacklisted accounts from their candidate lists.
-    """
-    # validation logins and emails for comparison against the results
-    validation_logins = {
-        login.strip().casefold()
-        for login in config.VALIDATION_SET_LOGINS
-        if isinstance(login, str) and login.strip()
-    }
-    
-    # blacklist logins for exclusion from validation metrics
-    blacklist_logins = {
-        login.strip().casefold()
-        for login in config.BAD_LOGINS
-        if isinstance(login, str) and login.strip()
-    }
-    
-    # blacklist logins and emails for exclusion from validation metrics
-    blacklist_emails = {
-        email.strip().casefold()
-        for email in config.BAD_EMAILS
-        if isinstance(email, str) and email.strip()
-    }
-    
-    # subtract blacklisted emails from validation emails to ensure overlaps count only as blacklist records
-    validation_emails = {
-        email.strip().casefold()
-        for email in config.VALIDATION_SET_EMAILS
-        if isinstance(email, str) and email.strip()
-    } - blacklist_emails
-    
-    # checks whether any validation labels remain after excluding blacklisted emails
-    validation_labels_exist = bool(validation_logins or validation_emails)
-    
-    # if there are no validation labels, return early with default metrics
-    if not validation_labels_exist:
-        return {
-            "validation_emails_total": 0,
-            "validation_emails_found": 0,
-            "validation_email_coverage": None,
-            "validation_logins_total": 0,
-            "validation_logins_found": 0,
-            "validation_positive_accounts_found": 0,
-            "validation_average_precision": None,
-            "validation_recall_k": 0,
-            "validation_recall_at_k": None,
-            "validation_mean_reciprocal_rank": None,
-        }
-    
-    # organize users by their login for quick lookup
-    users_by_login = {}
-    for user in results:
-        login = user.get("login")
-        
-        if isinstance(login, str) and login.strip():
-            users_by_login[login.casefold()] = user
-    
-    # prepare eligible ranking candidates and track validation labels represented in the records
-    candidates = []
-    found_emails = set()
-    found_logins = set()
-    
-    # iterate over users and collect matched validation emails and their scores
-    for login, user in users_by_login.items():
-        raw_emails = user.get("emails") or []
-        
-        if isinstance(raw_emails, str):
-            raw_emails = [raw_emails]
-        
-        # normalize and clean user emails for comparison with validation set
-        user_emails = {
-            email.strip().casefold()
-            for email in raw_emails
-            if isinstance(email, str) and email.strip()
-        }
-        
-        # determine which of the user's emails match the validation set
-        matched_emails = user_emails & validation_emails
-        found_emails.update(matched_emails)
-        
-        # determine if the user's login matches any held-out validation logins
-        if login in validation_logins:
-            found_logins.add(login)
-        
-        # retrieve the user's composite score, defaulting to 0.0 if not present or invalid
-        score = user.get("composite_score", 0.0)
-        if not isinstance(score, (int, float)):
-            score = 0.0
-        
-        # append the account label along with each candidate's login, score, and matched emails
-        is_validation_account = login in validation_logins or bool(matched_emails)
-        graph_score = user.get("graph_score", 0.0)
-
-        # exclude known bad accounts from every ranking metric
-        if login in blacklist_logins or user_emails.intersection(blacklist_emails):
-            continue
-
-        # exclude isolated validation users to avoid distorting evaluation metrics
-        if is_validation_account and graph_score == 0:
-            continue
-
-        candidate = (login, float(score), matched_emails, is_validation_account)
-        candidates.append(candidate)
-    
-    # compute labels and scores for evaluation metrics
-    labels = [is_validation_account for _, _, _, is_validation_account in candidates]
-    scores = [score for _, score, _, _ in candidates]
-    
-    # compute the average precision score if there are both positive and negative labels
-    average_precision = (
-        average_precision_score(labels, scores)
-        if any(labels) and not all(labels)
-        else None
-    )
-    
-    # rank candidates by composite score, using login as a deterministic tie-breaker
-    ranked_candidates = sorted(candidates, key=lambda item: (-item[1], item[0]))
-    relevant_account_count = sum(labels)
-    top_k = ranked_candidates[:relevant_account_count]
-
-    # A-MRR uses the same blacklist-filtered candidate pool as the other ranking metrics
-    mrr_relevant_account_count = relevant_account_count
-
-    # calculate reciprocal rank for each eligible validation account record
-    reciprocal_rank_total = sum(
-        1 / rank
-        for rank, candidate in enumerate(ranked_candidates, start=1)
-        if candidate[3]
-    )
-    mean_reciprocal_rank = (
-        reciprocal_rank_total / mrr_relevant_account_count
-        if mrr_relevant_account_count
-        else None
-    )
-    
-    return {
-        "validation_emails_total": len(validation_emails),
-        "validation_emails_found": len(found_emails),
-        "validation_email_coverage": (
-            len(found_emails) / len(validation_emails)
-            if validation_emails
-            else None
-        ),
-        "validation_logins_total": len(validation_logins),
-        "validation_logins_found": len(found_logins),
-        "validation_positive_accounts_found": relevant_account_count,
-        "validation_average_precision": average_precision,
-        "validation_recall_k": relevant_account_count,
-        "validation_recall_at_k": (
-            sum(candidate[3] for candidate in top_k) / relevant_account_count
-            if relevant_account_count
-            else None
-        ),
-        "validation_mean_reciprocal_rank": mean_reciprocal_rank,
-    }
-
-def score_and_validate_user_results(
+def score_user_results(
     search_results: list[dict],
     stored_records: Iterable[dict],
-) -> tuple[list[dict], dict[str, int | float | None]]:
+) -> list[dict]:
     """
     Inputs: List of User dicts obtained from the search and User dicts retrieved from the database (users table)
-    Outputs: Tuple containing the scored search results and a dictionary of validation metrics
-    Method: Score the union of search results and stored records using the scoring battery, then compute validation metrics based on held-out validation emails.
-    Information (per User): Whether the user's emails match any held-out validation emails
+    Outputs: Scored search results
+    Method: Score the union of search results and stored records using the scoring battery.
     """
     candidates_by_login = {} # dictionary to store candidates keyed by their login (case-insensitive)
     
@@ -691,9 +528,8 @@ def score_and_validate_user_results(
         if isinstance(login, str) and login.strip():
             candidates_by_login[login.casefold()] = record
     
-    # score the combined candidates using the scoring battery and compute validation metrics
+    # score the combined candidates using the scoring battery
     scored_candidates = scoring_battery(list(candidates_by_login.values()))
-    validation_metrics = validation_email_metrics(scored_candidates)
     
     # create a dictionary of scored candidates keyed by their login for easy lookup
     scored_by_login = {
@@ -710,4 +546,4 @@ def score_and_validate_user_results(
         for record in search_results
     ]
     
-    return scored_search_results, validation_metrics
+    return scored_search_results

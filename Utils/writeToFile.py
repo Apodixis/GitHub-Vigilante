@@ -27,14 +27,13 @@ def _sanitize_excel_value(value):
 
 def write_to_excel(
     results_data: list[dict],
-    validation_metrics: dict[str, int | float | None] | None = None,
     *,
     searched_logins: list[str] | None = None,
     searched_emails: list[str] | None = None,
     user_records: list[dict] | None = None,
 ) -> str:
     """
-    Inputs: Search results, optional aggregate user-validation metrics, exact search targets, and user records for summary counts
+    Inputs: Search results, exact search targets, and user records for summary counts
     Outputs: Excel file using the following file naming convention: f"{YYYYMMDDHHMM}{search_method}_{target}{enriched}.xlsx"
     Method: Write a summary worksheet followed by the search results worksheet
     """
@@ -104,13 +103,6 @@ def write_to_excel(
         if isinstance(login, str) and login.strip()
     }
     
-    # Count unique user records for records in the validation logins set
-    validation_logins = {
-        login.strip().casefold()
-        for login in config.VALIDATION_SET_LOGINS
-        if isinstance(login, str) and login.strip()
-    }
-    
     # Count unique user records for records in the blacklisted emails set
     blacklist_emails = {
         email.strip().casefold()
@@ -118,13 +110,6 @@ def write_to_excel(
         if isinstance(email, str) and email.strip()
     }
 
-    # Exclude blacklisted emails from validation matches so overlaps count only as blacklist records
-    validation_emails = {
-        email.strip().casefold()
-        for email in config.VALIDATION_SET_EMAILS
-        if isinstance(email, str) and email.strip()
-    } - blacklist_emails
-    
     # normalizes user emails to ensure indexing does not cause errors
     def user_emails(user: dict) -> set[str]:
         raw_emails = user.get("emails") or []
@@ -150,34 +135,12 @@ def write_to_excel(
         for login, user in users_by_login.items()
     )
     
-    # Count unique user records for records in the validation logins and emails sets
-    validation_user_count = sum(
-        login in validation_logins or bool(user_emails(user) & validation_emails)
-        for login, user in users_by_login.items()
-    )
-    
     # Build summary rows for output file
     summary_rows = [
         ("Total user records in output", len(users_by_login)),
         ("Records matching searched logins/emails", searched_user_count),
         ("Blacklist user records in output", blacklist_user_count),
-        ("Validation user records in output", validation_user_count),
     ]
-    
-    # Append configured validation metrics to the summary rows
-    if validation_metrics is not None:
-        summary_rows.extend([
-            ("Validation emails total", validation_metrics.get("validation_emails_total")),
-            ("Validation emails found", validation_metrics.get("validation_emails_found")),
-            ("Validation email coverage", validation_metrics.get("validation_email_coverage")),
-            ("Validation logins total", validation_metrics.get("validation_logins_total")),
-            ("Validation logins found", validation_metrics.get("validation_logins_found")),
-            ("Validation average precision", validation_metrics.get("validation_average_precision")),
-            ("Validation positive accounts found", validation_metrics.get("validation_positive_accounts_found")),
-            ("Recall@K (K)", validation_metrics.get("validation_recall_k")),
-            ("Recall@K", validation_metrics.get("validation_recall_at_k")),
-            ("Mean reciprocal rank", validation_metrics.get("validation_mean_reciprocal_rank")),
-        ])
     
     # Write summary rows column names to the summary worksheet
     summary_ws.append(["Metric", "Value"])

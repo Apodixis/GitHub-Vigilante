@@ -114,54 +114,6 @@ def _decision_tree() -> int:
         except ValueError:
             print("Invalid selection. Please enter 1, 2, 3, or 4.")
 
-def _validation_metrics(
-    results_data: list[dict],
-) -> tuple[list[dict], dict[str, int | float | None]]:
-    """
-    Scores and validates the search results against stored user records and computes metrics related to validation emails.
-    Prints model validation metrics: validation coverage, average precision, Recall@K, and mean reciprocal rank.
-    """
-    # score the search results and validate against stored user records
-    results_data, metrics = transform.score_and_validate_user_results(
-        results_data,
-        database.get_all_user_records(),
-    )
-    
-    # extract validation metrics from the results of the scoring and validation process
-    total_validation_emails = metrics["validation_emails_total"]
-    found_validation_emails = metrics["validation_emails_found"]
-    email_coverage = metrics["validation_email_coverage"]
-    average_precision = metrics["validation_average_precision"]
-    recall_at_k = metrics["validation_recall_at_k"]
-    recall_k = metrics["validation_recall_k"]
-    mean_reciprocal_rank = metrics["validation_mean_reciprocal_rank"]
-    
-    # format and print the validation metrics for user readability
-    coverage_text = (
-        f"{found_validation_emails}/{total_validation_emails} ({email_coverage:.1%})"
-        if email_coverage is not None
-        else "N/A"
-    )
-    average_precision_text = f"{average_precision:.4f}" if average_precision is not None else "N/A"
-    recall_at_k_text = f"{recall_at_k:.4f}" if recall_at_k is not None else "N/A"
-    mean_reciprocal_rank_text = (
-        f"{mean_reciprocal_rank:.4f}"
-        if mean_reciprocal_rank is not None
-        else "N/A"
-    )
-    
-    print(f"Validation email coverage: {coverage_text}")
-    print(
-        "Validation logins found: "
-        f"{metrics['validation_logins_found']}/{metrics['validation_logins_total']}"
-    )
-    print(f"Validation average precision: {average_precision_text}")
-    print(f"Validation Recall@K (K={recall_k}): {recall_at_k_text}")
-    print(f"Validation mean reciprocal rank: {mean_reciprocal_rank_text}")
-    # -- END OF VALIDATION METRICS PRINTING
-    
-    return results_data, metrics
-
 def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
@@ -193,7 +145,7 @@ def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
     if search_mode == "1": # User Search Exact
         targets = menus.multiple_input_prompt("User login") # user input menu
         
-        # Store the searched logins for later use in validation and output
+        # Store the searched logins for output summaries
         searched_logins = [targets] if isinstance(targets, str) else list(targets)
         
         menus.clear_terminal()
@@ -223,7 +175,7 @@ def _user_search(token) -> tuple[list[dict], list[str], list[str]]:
         search_method += "_Email"
         targets = menus.multiple_input_prompt("Email") # email input menu
         
-        # Store the searched emails for later use in validation and output
+        # Store the searched emails for output summaries
         searched_emails = [targets] if isinstance(targets, str) else list(targets)
         
         menus.clear_terminal()
@@ -342,15 +294,17 @@ if __name__ == '__main__':
     choice = _decision_tree() # Begin program execution
     menus.clear_terminal()
     
-    # Initialize variables for storing results and validation metrics
-    validation_metrics = None
+    # Initialize variables for output summaries
     searched_logins = []
     searched_emails = []
     summary_user_records = None
     
     if choice == 1: # User Search
         _results_data, searched_logins, searched_emails = _user_search(token)
-        results_data, validation_metrics = _validation_metrics(_results_data) # Validate the fetched user data
+        results_data = transform.score_user_results(
+            _results_data,
+            database.get_all_user_records(),
+        )
         summary_user_records = results_data
         
         # write user records to sqlite database
@@ -382,8 +336,7 @@ if __name__ == '__main__':
     
     writeToFile.write_to_excel(
         results_data,
-        validation_metrics,
         searched_logins=searched_logins,
         searched_emails=searched_emails,
         user_records=summary_user_records,
-    ) # Write results data and validation metrics to an Excel file
+    ) # Write results data to an Excel file
