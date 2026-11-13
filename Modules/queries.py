@@ -3,6 +3,7 @@ Central location for GraphQL and REST API query strings used in in requests.
 """
 # standard library packages (Python-native)
 import json
+from typing import Iterable
 
 
 # Variable declarations for pagination and fetch limits
@@ -97,6 +98,40 @@ def graphql_organizations_exact_query(orgLogin: str) -> str:
         }}
     }}
 """
+
+#============================================================================================
+
+def repo_details_query(repos: str | Iterable[str]) -> str:
+    """
+    Inputs: One or more repository (owner/name) strings
+    Outputs: GraphQL Repository query string
+    Method: Variable insertion using a format string, iterative query development via concatenation
+    """
+    repos = [repos] if isinstance(repos, str) else sorted(set(repos))
+    if not repos:
+        raise ValueError("At least one repository owner/name pair is required.")
+    
+    query = f"""query GetRepoDetails {{
+            """
+    
+    for i, repo in enumerate(repos):
+        parts = repo.split("/")
+        if len(parts) != 2 or not all(parts) or any(char.isspace() for char in repo):
+            raise ValueError(f"Invalid repository {repo!r}. Enter an owner/name pair.")
+        owner, name = parts
+        
+        # Convert owner to a JSON literal for safe insertion into the GraphQL query
+        owner_literal = json.dumps(owner)
+        
+        query += f"""repo{i}: repository(owner: {owner_literal}, name: {json.dumps(name)}) {{
+            owner {{
+                ... on User {{ login }}
+            }}
+        }}
+    """
+    
+    query += f"}}"
+    return query
 
 #============================================================================================
 

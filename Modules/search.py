@@ -1,5 +1,6 @@
 # standard library packages (Python-native)
 from typing import Iterable
+from urllib.parse import quote
 
 # local imports
 from Modules import client, database, graphql_fetchers, queries, state
@@ -409,3 +410,122 @@ def organization_search(
     target = logins[0] if len(logins) == 1 else f"{len(logins)}-Orgs"
     
     return org_rows, members, target
+
+#============================================================================================
+
+def repository_search_exact(
+    token: str,
+    targets: str | Iterable[str],
+) -> tuple[set[str], int]:
+    """
+    Inputs: GitHub Personal Access Token and one or more GitHub repositories
+    Outputs: Set of unique repository owner and contributor user logins, and valid repository count
+    Method: Retrieve logins of users associated with the target repositories
+    Information (per owner and contributor Users): Login
+    """
+    logins = set() # initialize a set to keep track of unique logins associated with target repositories
+    
+    # Ensure targets is a list of repository identifiers to avoid indexing individual string characters when len(targets) = 1
+    targets = [targets] if isinstance(targets, str) else list(targets)
+    valid_targets: list[str] = [] # initialize the list to store valid repository targets
+    
+    # verify that each repository target is a valid owner/name pair
+    for repo in sorted(set(targets)):
+        parts = repo.split("/")
+        if len(parts) != 2 or not all(parts) or any(char.isspace() for char in repo):
+            print(f"{repo!r} skipped: Invalid repository owner/name pair.")
+            continue
+        
+        valid_targets.append(repo)
+    
+    # reassign the correctly formatted repositories to the targets list
+    targets = valid_targets
+    
+    # If no valid repository targets remain after validation, exit early
+    if not targets:
+        print("No valid repository targets remain.")
+        return logins, 0
+    
+    query = queries.repo_details_query(targets) # Construct the GraphQL query string for the supplied repositories
+    repo_owners = client.graphql_request(token, query)
+    
+    # Map each repository to a unique alias for the GraphQL query
+    aliases = {f"repo{i}": repo for i, repo in enumerate(targets)}
+    
+    # Initialize a set to keep track of repository aliases that are missing or not found in the GraphQL response
+    missing_aliases: set[str] = set()
+    for error in repo_owners.get("errors") or []:
+        path = error.get("path") or []
+        
+        # Check if the error indicates that the repository was not found and corresponds to a known alias
+        if error.get("type") == "NOT_FOUND" and len(path) == 1 and path[0] in aliases:
+            missing_aliases.add(path[0])
+        
+        # If the error is not a NOT_FOUND error for a known alias, raise an exception
+        else:
+            raise RuntimeError(f"Repository GraphQL request failed: {repo_owners['errors']}")
+    
+    # Extract the 'data' field from the GraphQL response payload
+    data = repo_owners.get("data")
+    
+    # If all aliases are missing and no data is returned, initialize an empty data dictionary
+    if data is None and missing_aliases == set(aliases):
+        data = {}
+    
+    # Raise an error if the data returned from the GraphQL request is nota dictionary
+    if not isinstance(data, dict):
+        raise RuntimeError("Repository GraphQL request returned no repository data.")
+    
+    # Iterate over each alias-repository pair to validate and collect repository information
+    valid_targets = []
+    for alias, repo in aliases.items():
+        # Skip the repository if it is marked as missing or if the data for the alias is None
+        if alias in missing_aliases or (alias in data and data[alias] is None):
+            print(f"{repo} skipped: Repository not found or inaccessible.")
+            continue
+        
+        # Retrieve the repository information from the GraphQL response for the current alias
+        repository = data.get(alias)
+        if not isinstance(repository, dict):
+            raise RuntimeError(f"Repository GraphQL response is missing data for {repo!r}.")
+        
+        valid_targets.append(repo)
+        login = (repository.get("owner") or {}).get("login")
+        
+        if isinstance(login, str) and login and "[bot]" not in login.casefold():
+            logins.add(login.casefold())
+    targets = valid_targets
+    if not targets:
+        print("No valid repository targets remain.")
+        return logins, 0
+    
+    for repo in targets: # iterate over each target repository to fetch contributor information via the REST API
+        page = 1 # restart pagination for each repository
+        print(f"Processing repository: {repo}") # progress update for the current repository
+        
+        while page <= 5: # The REST API limits linked contributors to 500 per repository (100 per page, 5 pages max)
+            # build the REST API request URL and parameters for the current page of contributors
+            contributors = client.rest_request(
+                token,
+                f"https://api.github.com/repos/{quote(repo, safe='/')}/contributors",
+                {"per_page": 100, "page": page},
+            )
+            
+            if not isinstance(contributors, list):
+                raise RuntimeError(f"Invalid contributor response for {repo!r}.")
+            
+            # extract contributor logins from the current page of contributors
+            for contributor in contributors:
+                login = contributor.get("login")
+                if isinstance(login, str) and login and "[bot]" not in login.casefold():
+                    logins.add(login.casefold()) # add the contributor logins to the overall set of logins
+            
+            # if the current page has fewer than 100 contributors, it indicates the last page
+            if len(contributors) < 100:
+                break
+            
+            page += 1
+            
+        print(f"{repo} processed: {len(logins)} total unique logins fetched across all repositories.")
+    
+    return logins, len(targets)

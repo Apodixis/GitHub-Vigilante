@@ -218,6 +218,11 @@ def rest_request(token: str, url: str, params: Optional[Dict] = None) -> Any:
             }
         
         response.raise_for_status()
+        
+        # Handle the case where the response has no content but is expected to return a list of contributors
+        if response.status_code == 204 and url.endswith("/contributors"):
+            return []
+        
         return response.json()
     
     raise RuntimeError("REST request failed after rate-limit retries.")

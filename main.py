@@ -97,8 +97,8 @@ def _decision_tree() -> int:
     
     print("1) User Search")
     print("2) Organization Search")
-    print("3) Pivot Engine")
-    print("4) PLACEHOLDER") # Development placeholder for additional, unknown functions
+    print("3) Repository Search")
+    print("4) Pivot Engine")
     
     while True:
         choice = input("Enter 1, 2, 3, or 4: ").strip()
@@ -261,6 +261,59 @@ def _organization_search(token) -> tuple[list[dict], str, str]:
     state.outfile_title = f"_{search_method}_{target}{enriched}"
     return results # returns target user for inclusion in file naming convention
 
+def _repository_search(token) -> tuple[list[dict], list[str], list[str]]:
+    '''
+    Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
+    1. Full Information: Returns all user and repository metadata associated with the input repositories
+    2. Similar Repositories: Returns repositories that are similar to the input repositories based on various criteria.
+    3. Code Proliferation: Returns repositories that have significant code overlap with the input repositories.
+    '''
+    # Prompt user to select the search mode (Full Information, Similar Repositories, or Code Proliferation)
+    search_mode_options = [
+        "Full Information",
+        "Similar Repositories",
+        "Code Proliferation"
+    ]
+    
+    search_mode = menus.selection_menu(search_mode_options) # Repository Search Mode Selection
+    menus.clear_terminal()
+    
+    if search_mode == "1": # Full Information
+        targets = menus.multiple_input_prompt("Repository owner/name pairs") # repository input menu
+        
+        start_time = time.perf_counter() # Start time measurement (Benchmarking)
+        logins, valid_repo_count = search.repository_search_exact(token, targets) # Fetch logins of users associated with the target repositories
+        
+        search_method = f"{valid_repo_count}-Repos" # used in outfile naming convention
+        enriched = "_Enriched" # used in outfile naming convention
+        
+        searched_logins = sorted(logins)
+        if not logins:
+            print("No repository owner or contributor logins returned.")
+            menus.quit_program()
+        
+        # fetch and enrich user data for the logins associated with the target repositories
+        user_data, target = search.user_search_exact(token, logins, recursions=0)
+    
+    elif search_mode == "2": # Similar Repositories
+        #### PLACEHOLDER: Implement repository search functionality for each mode
+        targets = menus.multiple_input_prompt("Repository owner/name pairs") # repository input menu
+        menus.quit_program()
+        
+    elif search_mode == "3": # Code Proliferation
+        #### PLACEHOLDER: Implement repository search functionality for each mode
+        targets = menus.multiple_input_prompt("Repository owner/name pairs") # repository input menu
+        menus.quit_program()
+    
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {elapsed_time:.4f} seconds") # Prints execution time (without user input delay)
+    
+    # update outfile_title to reflect methods used to generate outfile data
+    state.outfile_title = f"_{search_method}_{target}{enriched}"
+    
+    return user_data, searched_logins, []
+
 def _pivot_engine(token):
     '''
     Broadens target analysis by fetching followership, Organizations, and account metadata. Also returns noteworthy followers:
@@ -301,10 +354,14 @@ if __name__ == '__main__':
     
     if choice == 1: # User Search
         _results_data, searched_logins, searched_emails = _user_search(token)
+        
+        # score user results based on existing database records
         results_data = transform.score_user_results(
             _results_data,
             database.get_all_user_records(),
         )
+        
+        # build user records summary for output file
         summary_user_records = results_data
         
         # write user records to sqlite database
@@ -320,15 +377,27 @@ if __name__ == '__main__':
             if user.get("membership") != "N/A"
         ]
     
-    elif choice == 3: # Pivot Engine
+    elif choice == 3: # Repository Search
+        _results_data, searched_logins, searched_emails = _repository_search(token)
+        
+        # score user results based on existing database records
+        results_data = transform.score_user_results(
+            _results_data,
+            database.get_all_user_records(),
+        )
+        
+        # build user records summary for output file
+        summary_user_records = results_data
+        
+        # write user records to sqlite database
+        stored_count = database.store_user_records(results_data)
+        print(f"Stored {stored_count} user records in {database.DATABASE_PATH}")
+    
+    elif choice == 4: # Pivot Engine
         results_data = _pivot_engine(token)
         
         # build user records summary for output file
         summary_user_records = results_data
-    
-    elif choice == 4:
-        print("PLACEHOLDER for additional functionality.")
-        menus.quit_program()
     
     if not results_data:
         print("\nNO RESULTS RETURNED")

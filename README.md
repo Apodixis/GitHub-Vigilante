@@ -39,17 +39,23 @@ First identifies logins from supplied email addresses, then passes logins to the
 **1) Full Info**
 Retrieves information on the input organization(s), org members, and org repositories.
 
-### Pivots Search
 
-**1) Committer Email Search**
-Retrieves all unique (login, fullname) pairs for all commits pushed by any of the input email addresses (or aliased email addresses) or fullnames. *Fullname searches are tokenized, making them less precise and more likely to include additional noise if the fullname includes punctuation (most commonly '-').*
+### Repository Search
 
-### Repository Search *(Planned)*
+Available as option **3** in the main menu. Full Information is implemented.
+Similar Repositories and Code Proliferation remain placeholders and exit without
+running a search.
 
-**1) Full Info**
-<span style="color:#FFA500;">*(Planned, development not yet started)*</span>
+**1) Full Information**
 <ul>
-Retrieves information on the input repository, network of forks, and contributor information of all repositories in network.
+Accepts one or more `owner/name` pairs. Collects unique user-owner and contributor
+logins, then fetches and enriches their user records. Organization owners and
+anonymous contributors without logins are excluded.
+
+The Excel output contains scored user records. Its searched-logins summary counts
+returned users matching the discovered owner/contributor logins. No searched
+emails are supplied because the inputs are repositories, not email addresses.
+Fork enumeration is not implemented.
 </ul>
 
 **2) Similar Repositories**
@@ -57,3 +63,14 @@ Retrieves information on the input repository, network of forks, and contributor
 <ul>
 Searches based on name similarity and various README attributes to identify similar repositories.
 </ul>
+
+**3) Code Proliferation** *(Placeholder)*
+<span style="color:#FFA500;">*(Planned, development not yet started)*</span>
+<ul>
+Performs a full info search on all repositories forked from the input repositories.
+</ul>
+
+### Pivots Search
+
+**1) Committer Email Search**
+Retrieves all unique (login, fullname) pairs for all commits pushed by any of the input email addresses (or aliased email addresses) or fullnames. *Fullname searches are tokenized, making them less precise and more likely to include additional noise if the fullname includes punctuation (most commonly '-').*

@@ -1,8 +1,9 @@
 # standard library packages (Python-native)
 import os, subprocess, sys
+from typing import NoReturn
 
 
-def quit_program() -> None:
+def quit_program() -> NoReturn:
     """
     Pauses execution to provide a user the opportunity to read any error messages before exiting the program.
     """
